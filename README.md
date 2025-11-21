@@ -13,14 +13,14 @@ training/                    # Training scripts for phrasers and Word2Vec models
 validation/                  # Model and dimension validation utilities
 analysis/                    # Aggregation, plotting, and scoring scripts
 
-data/                        # Reference CSV/text inputs (lexicons, traits, questions)
+reference_data/              # Reference CSV/text inputs (lexicons, traits, questions)
 outputs/
   models/                    # Default location for trained models and intermediates
   results/                   # Default location for aggregated CSVs and plots
 notebooks/                   # Reserved for exploratory notebooks
 ```
 
-Key reference files live in `data/`:
+Key reference files live in `reference_data/`:
 
 * `Stigma_WordLists.csv`
 * `Disease_list_5.12.20_uncorrupted.csv`
@@ -41,14 +41,14 @@ An example aggregated output is provided at `outputs/results/stigmaindex_aggrega
 * `training/TrainingW2V_Booted_CleanedUp.py`: Train bootstrapped Word2Vec models using the phrasers trained for each time window.
 
 ### Validation
-* `validation/Validating_OverallW2VModels_CleanedUp.py`: Validate an overall Word2Vec model on the WordSim-353 test set and the Google analogy test (`data/questions_words_pasted.txt`).
+* `validation/Validating_OverallW2VModels_CleanedUp.py`: Validate an overall Word2Vec model on the WordSim-353 test set and the Google analogy test (`reference_data/questions_words_pasted.txt`).
 * `validation/Validating_Dimensions_in_Bootstraps_CleanedUp.py`: Perform cross-validation for each of the four stigma dimensions, compute cosine similarities, and list the most/least similar words. Requires `data_prep/build_lexicon_stigma.py` and `analysis/dimension_stigma.py`.
 
 ### Analysis and aggregation
-* `analysis/WriteStigmaScores_CleanedUp.py`: Compute four stigma scores plus a medicalization score for each disease across models/time windows and write CSVs. Depends on `data_prep/build_lexicon_stigma.py`, `analysis/dimension_stigma.py`, and inputs such as `data/updated_personality_trait_list.csv`, `data/Stigma_WordLists.csv`, and `data/Disease_list_5.12.20_uncorrupted.csv`.
+* `analysis/WriteStigmaScores_CleanedUp.py`: Compute four stigma scores plus a medicalization score for each disease across models/time windows and write CSVs. Depends on `data_prep/build_lexicon_stigma.py`, `analysis/dimension_stigma.py`, and inputs such as `reference_data/updated_personality_trait_list.csv`, `reference_data/Stigma_WordLists.csv`, and `reference_data/Disease_list_5.12.20_uncorrupted.csv`.
 * `analysis/AggregatingStigmaScores_StigmaIndex_CleanedUp.py`: Aggregate bootstrapped scores across time windows to produce mean and 92% confidence intervals for each disease’s stigma index (writes a consolidated CSV, e.g., `stigmaindex_aggregated_temp_92CI.csv`).
 * `analysis/AggregatingBootstraps_CleanedUp.py`: Aggregate bootstrapped scores per dimension and time window, emitting one CSV per dimension.
-* `analysis/WordCounts_CleanedUp.py`: Compute per-disease mention counts with confidence intervals. Requires `data/Disease_list_5.12.20_uncorrupted.csv` and currently contains legacy hard-coded paths.
+* `analysis/WordCounts_CleanedUp.py`: Compute per-disease mention counts with confidence intervals. Requires `reference_data/Disease_list_5.12.20_uncorrupted.csv` and currently contains legacy hard-coded paths.
 * `analysis/PlottingBootstrapped_CleanedUp.py`: Visualize stigma scores of diseases by group and time (expects an aggregated CSV such as `stigmaindex_aggregated_temp_92CI.csv`).
 
 ## Dependencies
@@ -68,12 +68,12 @@ Install them with `pip install -r requirements.txt` (if available) or `pip insta
 
 `config/path_config.py` centralizes path handling. Scripts import it via `from config.path_config import add_path_arguments, build_path_config` and accept consistent CLI flags:
 
-* `--raw-data-root`: Base directory containing `NData_<year>` folders with article pickles (default: `data/raw`).
+* `--raw-data-root`: Base directory containing `NData_<year>` folders with article pickles (default: `reference_data/raw`).
 * `--contemp-data-root`: Optional override for `ContempData_<year>` folders (falls back to `--raw-data-root`).
 * `--modeling-dir`: Intermediate artifacts such as bigrams, bootstraps, and embeddings (default: `outputs/models`).
 * `--results-dir`: Where result CSVs and plots are written (default: `outputs/results`).
 * `--analyses-dir`: Base directory for ancillary files (default: `analysis`).
-* `--lexicon-path`, `--disease-list-path`, `--personality-traits-path`: Paths to the bundled CSV inputs in `data/`.
+* `--lexicon-path`, `--disease-list-path`, `--personality-traits-path`: Paths to the bundled CSV inputs in `reference_data/`.
 
 ## Typical workflow
 
@@ -82,20 +82,20 @@ Install them with `pip install -r requirements.txt` (if available) or `pip insta
    python data_prep/prepare_corpus_from_csv.py \
      --csv-path /path/to/articles.csv \
      --text-column Text --title-column title --date-column Date \
-     --default-year 2010 --output-root data/raw --write-manifest
+     --default-year 2010 --output-root reference_data/raw --write-manifest
    ```
 
 2. **Train phrase model for a 3-year window**:
    ```bash
    python training/TrainingPhraser_CleanedUp.py \
-     --year 1992 --raw-data-root data/raw --modeling-dir outputs/models
+     --year 1992 --raw-data-root reference_data/raw --modeling-dir outputs/models
    ```
 
 3. **Train bootstrapped Word2Vec models**:
    ```bash
    python training/TrainingW2V_Booted_CleanedUp.py \
      --year 1992 --boots 25 --model-prefix CBOW_300d__win10_min50_iter3 \
-     --raw-data-root data/raw --modeling-dir outputs/models
+     --raw-data-root reference_data/raw --modeling-dir outputs/models
    ```
 
 4. **Compute stigma scores per dimension**:
