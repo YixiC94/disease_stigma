@@ -91,6 +91,9 @@ def write_pickles(
         year_dir = output_root / f"NData_{year}"
         year_dir.mkdir(parents=True, exist_ok=True)
         pickle_name = basename_template.format(year=year)
+        # Ensure .pkl extension if not present
+        if not pickle_name.endswith('.pkl'):
+            pickle_name += '.pkl'
         pickle_path = year_dir / pickle_name
         with pickle_path.open("wb") as f:
             pickle.dump(articles, f)
@@ -148,10 +151,10 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--output-basename",
-        default="all{year}bodytexts_regexeddisamb_listofarticles",
+        default="corpus_{year}.pkl",
         help=(
             "Filename template for each year's pickle. Use '{year}' as a placeholder; "
-            "for example 'articles_{year}.pkl' produces shorter names."
+            "for example 'corpus_{year}.pkl' produces clear names."
         ),
     )
     parser.add_argument(

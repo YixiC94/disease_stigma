@@ -17,11 +17,11 @@ class PathConfig:
     personality_traits_path: Path
 
     def raw_article_path(self, year: int) -> Path:
-        return self.raw_data_root / f"NData_{year}" / f"all{year}bodytexts_regexeddisamb_listofarticles"
+        return self.raw_data_root / f"NData_{year}" / f"corpus_{year}.pkl"
 
     def contemp_article_path(self, year: int) -> Path:
         base = self.contemp_data_root or self.raw_data_root
-        return base / f"ContempData_{year}" / f"all{year}bodytexts_regexeddisamb_listofarticles"
+        return base / f"ContempData_{year}" / f"corpus_{year}.pkl"
 
     def bigram_path(self, start_year: int, year_interval: int = 3) -> Path:
         end_year = start_year + year_interval - 1
