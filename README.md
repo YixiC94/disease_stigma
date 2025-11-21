@@ -13,10 +13,23 @@ Preprint of paper is available here: https://osf.io/preprints/socarxiv/7nm9x/. D
 * Note: We do not include code to collect raw news data using the Lexis Nexis API. Our code for this is lightly adapted from code provided to us by the University of Michigan to use the LexisNexis API and uses private API keys. We cannot redstribute the raw data collected from Lexis Nexis API.
 
 **TrainingPhraser_CleanedUp.py**
-* Train a phraser on text data from a given time window. One phraser trained per time window. 
+* Train a phraser on text data from a given time window. One phraser trained per time window.
 
 **TrainingW2V_Booted_CleanedUp.py**
 * Train word2vec models on bootstrapped text data. Use phrasers for each time window trained with the code "TrainingPhraser_CleanedUp.py"
+
+## Running with configurable paths
+
+All scripts now accept shared path arguments so you can point to your own corpus, models, and results directories without editing code. Key options:
+
+* `--raw-data-root`: Base directory containing the `NData_<year>` folders with raw article pickles. Optional when a script does not read raw data.
+* `--contemp-data-root`: Optional base for `ContempData_<year>` folders; defaults to `--raw-data-root` when omitted.
+* `--modeling-dir`: Location to read or write modeling artifacts (bigrams, bootstraps, embeddings). Optional for scripts that only read aggregated outputs.
+* `--results-dir`: Destination for result CSVs and plots; defaults to the current working directory.
+* `--analyses-dir`: Base directory for imports and ancillary files; defaults to the current working directory.
+* `--lexicon-path`, `--disease-list-path`, `--personality-traits-path`: Paths to the supporting CSV inputs, defaulting to the copies in this repository.
+
+Each script requests only the paths it needs. For example, `AggregatingStigmaScores_StigmaIndex_CleanedUp.py` requires `--modeling-dir` and `--results-dir`, while `PlottingBootstrapped_CleanedUp.py` only needs `--results-dir` unless you override input filenames.
 
 **Validating_OverallW2VModels_CleanedUp.py**
 * Validate an overall word2vec model on the WordSim-353 Test
