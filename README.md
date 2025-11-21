@@ -13,6 +13,7 @@ training/                    # Training scripts for phrasers and Word2Vec models
 validation/                  # Model and dimension validation utilities
 analysis/                    # Aggregation, plotting, and scoring scripts
 
+data/                        # User-provided corpora and prepared pickles (not tracked)
 reference_data/              # Reference CSV/text inputs (lexicons, traits, questions)
 outputs/
   models/                    # Default location for trained models and intermediates
@@ -68,7 +69,7 @@ Install them with `pip install -r requirements.txt` (if available) or `pip insta
 
 `config/path_config.py` centralizes path handling. Scripts import it via `from config.path_config import add_path_arguments, build_path_config` and accept consistent CLI flags:
 
-* `--raw-data-root`: Base directory containing `NData_<year>` folders with article pickles (default: `reference_data/raw`).
+* `--raw-data-root`: Base directory containing `NData_<year>` folders with article pickles (default: `data/raw`).
 * `--contemp-data-root`: Optional override for `ContempData_<year>` folders (falls back to `--raw-data-root`).
 * `--modeling-dir`: Intermediate artifacts such as bigrams, bootstraps, and embeddings (default: `outputs/models`).
 * `--results-dir`: Where result CSVs and plots are written (default: `outputs/results`).
@@ -82,20 +83,20 @@ Install them with `pip install -r requirements.txt` (if available) or `pip insta
    python data_prep/prepare_corpus_from_csv.py \
      --csv-path /path/to/articles.csv \
      --text-column Text --title-column title --date-column Date \
-     --default-year 2010 --output-root reference_data/raw --write-manifest
+     --default-year 2010 --output-root data/raw --write-manifest
    ```
 
 2. **Train phrase model for a 3-year window**:
    ```bash
    python training/TrainingPhraser_CleanedUp.py \
-     --year 1992 --raw-data-root reference_data/raw --modeling-dir outputs/models
+     --year 1992 --raw-data-root data/raw --modeling-dir outputs/models
    ```
 
 3. **Train bootstrapped Word2Vec models**:
    ```bash
    python training/TrainingW2V_Booted_CleanedUp.py \
      --year 1992 --boots 25 --model-prefix CBOW_300d__win10_min50_iter3 \
-     --raw-data-root reference_data/raw --modeling-dir outputs/models
+     --raw-data-root data/raw --modeling-dir outputs/models
    ```
 
 4. **Compute stigma scores per dimension**:
