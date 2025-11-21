@@ -97,7 +97,7 @@ def main():
                     workers=args.workers,
                     window=args.window,
                     sg=0,
-                    size=args.vector_size,
+                    vector_size=args.vector_size,
                     min_count=args.min_count,
                     iter=args.iterations,
                 )
@@ -120,7 +120,7 @@ def main():
                 workers=args.workers,
                 window=args.window,
                 sg=0,
-                size=args.vector_size,
+                vector_size=args.vector_size,
                 min_count=args.min_count,
                 iter=args.iterations,
             )
