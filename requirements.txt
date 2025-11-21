@@ -1,0 +1,6 @@
+gensim
+pandas
+numpy
+matplotlib
+nltk
+scikit-learn
