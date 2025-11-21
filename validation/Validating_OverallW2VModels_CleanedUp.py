@@ -15,7 +15,7 @@ def parse_arguments():
     parser.add_argument(
         "--analogy-file",
         type=Path,
-        default=Path("data/questions_words_pasted.txt"),
+        default=Path("reference_data/questions_words_pasted.txt"),
         help="Path to the Google analogy question file.",
     )
     return parser.parse_args()

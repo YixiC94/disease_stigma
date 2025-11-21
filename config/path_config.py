@@ -47,7 +47,7 @@ def add_path_arguments(
         "--raw-data-root",
         type=Path,
         required=require_raw_data_root,
-        default=Path("data/raw"),
+        default=Path("reference_data/raw"),
         help=(
             "Base directory containing NData_<year> folders with article pickles. "
             "Optional when a command does not read raw data."
@@ -84,19 +84,19 @@ def add_path_arguments(
     parser.add_argument(
         "--lexicon-path",
         type=Path,
-        default=Path("data/Stigma_WordLists.csv"),
+        default=Path("reference_data/Stigma_WordLists.csv"),
         help="Path to the stigma lexicon CSV.",
     )
     parser.add_argument(
         "--disease-list-path",
         type=Path,
-        default=Path("data/Disease_list_5.12.20_uncorrupted.csv"),
+        default=Path("reference_data/Disease_list_5.12.20_uncorrupted.csv"),
         help="Path to the disease list CSV.",
     )
     parser.add_argument(
         "--personality-traits-path",
         type=Path,
-        default=Path("data/updated_personality_trait_list.csv"),
+        default=Path("reference_data/updated_personality_trait_list.csv"),
         help="Path to the personality traits CSV.",
     )
 
