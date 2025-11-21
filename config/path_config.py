@@ -23,14 +23,16 @@ class PathConfig:
         base = self.contemp_data_root or self.raw_data_root
         return base / f"ContempData_{year}" / f"all{year}bodytexts_regexeddisamb_listofarticles"
 
-    def bigram_path(self, start_year: int) -> Path:
-        return self.modeling_dir / f"bigrammer_{start_year}_{start_year + 2}"
+    def bigram_path(self, start_year: int, year_interval: int = 3) -> Path:
+        end_year = start_year + year_interval - 1
+        return self.modeling_dir / f"bigrammer_{start_year}_{end_year}"
 
-    def bootstrap_corpus_path(self, start_year: int) -> Path:
-        return self.modeling_dir / f"allarticles_tabsep_{start_year}_{start_year + 2}tempboot"
+    def bootstrap_corpus_path(self, start_year: int, year_interval: int = 3) -> Path:
+        end_year = start_year + year_interval - 1
+        return self.modeling_dir / f"allarticles_tabsep_{start_year}_{end_year}tempboot"
 
-    def bootstrap_model_path(self, start_year: int, bootnum: int, prefix: str) -> Path:
-        end_year = start_year + 2
+    def bootstrap_model_path(self, start_year: int, bootnum: int, prefix: str, year_interval: int = 3) -> Path:
+        end_year = start_year + year_interval - 1
         return self.modeling_dir / "BootstrappedModels" / f"{start_year}_{end_year}" / f"{prefix}_{start_year}_{end_year}_boot{bootnum}"
 
     def aggregated_results_path(self, filename: str) -> Path:

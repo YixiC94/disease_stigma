@@ -22,12 +22,14 @@ def fold_word(target, second, wvmodel): #following the convex combination exampl
     return ( normalize(weighted_wv) )
  
 
+year_interval = 3
+
 for yr1 in [1980, 1983, 1986, 1989, 1992, 1995, 1998, 2001, 2004, 2007, 2010, 2013, 2016]:
     diseases= pd.read_csv('C:/Users/arsen/Dropbox/R01DiseaseStigma/Disease_list_5.12.20_uncorrupted.csv')
     diseases = diseases[ diseases['Plot'] == 'Yes' ]
     diseases = diseases.drop_duplicates(subset=['Reconciled_Name'])
     diseases = diseases[['PlottingGroup', 'Reconciled_Name']]
-    yr3=yr1 + 2
+    yr3 = yr1 + year_interval - 1
     for bootnum in [0,1,2,3, 4, 5, 6,7,8,9,10,11,12,13,14, 15, 16, 17 , 18 ,19, 20 ,21, 22 ,23, 24]:
         currentmodel1= Word2Vec.load('C:/Users/arsen/Dropbox/R01DiseaseStigma/LexisNexisNews_Data_Modeling/BootstrappedModels/' + str(yr1) + '_' + str(yr3) + '/CBOW_300d__win10_min50_iter3_'+ str(yr1)+ '_' + str(yr3) + "_boot" + str(bootnum)) #load in desired model
 
@@ -159,14 +161,14 @@ diseases= pd.read_csv('C:/Users/arsen/Dropbox/R01DiseaseStigma/RESULTS/LexisNexi
 
 ############
 
-curryear=1995
+start_year = 1995
 
 
 vocab_articles=[] #this is  a list of sentences, drawn from a sample of articles
 
-#bigram_transformer= Phraser.load("C:/Users/arsen/Dropbox/R01DiseaseStigma/LexisNexisNews_Data_Modeling/bigrammer_" + str(curryear) + "_" + str(curryear+2))        
+#bigram_transformer= Phraser.load("C:/Users/arsen/Dropbox/R01DiseaseStigma/LexisNexisNews_Data_Modeling/bigrammer_" + str(start_year) + "_" + str(start_year + year_interval - 1))
 
-for i in [curryear, curryear+1, curryear+2]:
+for i in range(start_year, start_year + year_interval):
     file = open('C:/Users/arsen/Dropbox/R01DiseaseStigma/LexisNexisAPI_DataCollection/RawData_NotSynced_To_Desktop/ContempData_' + str(i) + '/all' + str(i)+ 'bodytexts_regexeddisamb_listofarticles', 'rb') #do earliest of the three years to latest
     tfile_split= pickle.load(file) #this is a list where each item in list is an article
     file.close()  
