@@ -1,88 +1,105 @@
 # -*- coding: utf-8 -*-
 """
-Created on Thu Oct 22 16:34:02 2020
-
-@author: arsen
+Train bootstrapped Word2Vec models for a 3-year window.
 """
 
+import argparse
 import time
-import pickle 
-from random import sample, seed, choices
-from gensim.models import Word2Vec, phrases 
-import cython
-from gensim.test.utils import datapath
+import pickle
+from random import seed, choices
+from pathlib import Path
+from gensim.models import Word2Vec
 from gensim.models.phrases import Phraser
 from nltk.tokenize import word_tokenize
 
-def  write_booted_txt(cyear, seed_no):
-    #function to write a text file with bootstrapped data for a given time window for w2v model training
-    all_articles=[]
-    for i in [cyear, cyear+1, cyear+2]:
+from path_config import add_path_arguments, build_path_config
+
+
+def write_booted_txt(paths, cyear: int, seed_no: int, output_path: Path):
+    all_articles = []
+    for year in [cyear, cyear + 1, cyear + 2]:
         try:
-            file = open('C:/Users/arsen/Dropbox/R01DiseaseStigma/LexisNexisAPI_DataCollection/RawData_NotSynced_To_Desktop/NData_' + str(i) + '/all' + str(i)+ 'bodytexts_regexeddisamb_listofarticles', 'rb') #do earliest of the three years to latest
-            tfile_split= pickle.load(file) #this is a list where each item in list is an article
-            file.close()   
-            all_articles.extend(tfile_split)
-        except:
-            file = open('C:/Users/arsen/Dropbox/R01DiseaseStigma/LexisNexisAPI_DataCollection/RawData_NotSynced_To_Desktop/ContempData_' + str(i) + '/all' + str(i)+ 'bodytexts_regexeddisamb_listofarticles', 'rb') #do earliest of the three years to latest
-            tfile_split= pickle.load(file) #this is a list where each item in list is an article
-            file.close()  
-            all_articles.extend(tfile_split)
-    
-        
-    with open('C:/Users/arsen/Dropbox/R01DiseaseStigma/LexisNexisNews_Data_Modeling/allarticles_tabsep_' + str(cyear) + "_" + str(cyear+2) + 'tempboot', 'w', encoding='utf-8') as f:
+            with open(paths.raw_article_path(year), "rb") as file:
+                tfile_split = pickle.load(file)
+        except FileNotFoundError:
+            with open(paths.contemp_article_path(year), "rb") as file:
+                tfile_split = pickle.load(file)
+        all_articles.extend(tfile_split)
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(output_path, "w", encoding="utf-8") as f:
         seed(seed_no)
-        
-        all_articles = choices(all_articles,k= len(all_articles)) #resampled list for a bootstrapped version of the news in this year
-        
-        
+        all_articles = choices(all_articles, k=len(all_articles))
         for article in all_articles:
-            sentences_list= article.split(' SENTENCEBOUNDARYHERE ') #split the articles into sentences
-    
+            sentences_list = article.split(" SENTENCEBOUNDARYHERE ")
             for sent in sentences_list:
-                #sent= sent.split()
-                f.write( sent)
+                f.write(sent)
                 f.write("\n")
 
 
-
-#from https://stackoverflow.com/questions/46421771/text-processing-word2vec-training-after-phrase-detection-bigram-model
-#and from: #from: https://stackoverflow.com/questions/55086734/train-gensim-word2vec-using-large-txt-file
-class SentenceIterator:   
-    def __init__(self, filepath): 
+class SentenceIterator:
+    def __init__(self, filepath: Path):
         self.filepath = filepath
 
-    def __iter__(self): 
-        for line in open(self.filepath, "r", encoding="utf-8" ): 
-            yield word_tokenize(line.rstrip('\n'))
+    def __iter__(self):
+        for line in open(self.filepath, "r", encoding="utf-8"):
+            yield word_tokenize(line.rstrip("\n"))
 
-           
+
 class PhrasingIterable(object):
     def __init__(self, phrasifier, texts):
         self.phrasifier, self.texts = phrasifier, texts
+
     def __iter__(self):
         return iter(self.phrasifier[self.texts])
 
 
+def parse_arguments():
+    parser = argparse.ArgumentParser(description="Train bootstrapped Word2Vec models.")
+    add_path_arguments(parser)
+    parser.add_argument("--year", type=int, default=1992, help="Start year of the 3-year window (e.g., 1992).")
+    parser.add_argument("--boots", type=int, default=25, help="Number of bootstrap models to train.")
+    parser.add_argument(
+        "--model-prefix",
+        type=str,
+        default="CBOW_300d__win10_min50_iter3",
+        help="Prefix used when saving bootstrapped Word2Vec models.",
+    )
+    parser.add_argument("--window", type=int, default=10)
+    parser.add_argument("--min-count", type=int, default=50)
+    parser.add_argument("--vector-size", type=int, default=300)
+    parser.add_argument("--workers", type=int, default=5)
+    parser.add_argument("--iterations", type=int, default=3)
+    parser.add_argument("--sleep", type=int, default=120, help="Seconds to pause between model training steps.")
+    return parser.parse_args()
 
 
+def main():
+    args = parse_arguments()
+    paths = build_path_config(args)
 
-############# W2V Training (Train 25 models per time window)
+    bigram_transformer = Phraser.load(str(paths.bigram_path(args.year)))
+
+    for boot in range(args.boots):
+        write_booted_txt(paths, args.year, boot, paths.bootstrap_corpus_path(args.year))
+        sentences = SentenceIterator(paths.bootstrap_corpus_path(args.year))
+        corpus = PhrasingIterable(bigram_transformer, sentences)
+        time.sleep(args.sleep)
+        model1 = Word2Vec(
+            corpus,
+            workers=args.workers,
+            window=args.window,
+            sg=0,
+            size=args.vector_size,
+            min_count=args.min_count,
+            iter=args.iterations,
+        )
+        model1.init_sims(replace=True)
+        model_path = paths.bootstrap_model_path(args.year, boot, args.model_prefix)
+        model_path.parent.mkdir(parents=True, exist_ok=True)
+        model1.save(str(model_path))
+        time.sleep(args.sleep)
 
 
-curryear=1992
-
-bigram_transformer= Phraser.load("C:/Users/arsen/Dropbox/R01DiseaseStigma/LexisNexisNews_Data_Modeling/bigrammer_" + str(curryear) + "_" + str(curryear+2))        
-
-for boot in list(range(0,25)): 
-    
-    write_booted_txt(curryear,boot)
-    
-    sentences = SentenceIterator('C:/Users/arsen/Dropbox/R01DiseaseStigma/LexisNexisNews_Data_Modeling/allarticles_tabsep_' + str(curryear) + "_" + str(curryear+2) + 'tempboot') 
-    corpus = PhrasingIterable(bigram_transformer, sentences)
-    time.sleep(120)
-    model1 = Word2Vec(corpus, workers=5, window=10, sg=0,size=300, min_count=50, iter=3) #added in max vocab size last, consider upping the min vocab word count. 
-    model1.init_sims(replace=True) #Precompute L2-normalized vectors. If replace is set to TRUE, forget the original vectors and only keep the normalized ones. Saves lots of memory, but can't continue to train the model.
-    model1.save("C:/Users/arsen/Dropbox/R01DiseaseStigma/LexisNexisNews_Data_Modeling/BootstrappedModels/CBOW_300d__win10_min50_iter3_" + str(curryear) + "_" + str(curryear+2) + '_boot' + str(boot)) #save model for later use! change the name to something to remember the hyperparameters you trained it with
-    time.sleep(120)
-
+if __name__ == "__main__":
+    main()
