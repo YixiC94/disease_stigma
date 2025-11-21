@@ -99,7 +99,7 @@ def main():
                     sg=0,
                     vector_size=args.vector_size,
                     min_count=args.min_count,
-                    iter=args.iterations,
+                    epochs=args.iterations,
                 )
                 model1.init_sims(replace=True)
                 model_path = paths.bootstrap_model_path(current_start, boot, args.model_prefix, current_interval)
@@ -122,7 +122,7 @@ def main():
                 sg=0,
                 vector_size=args.vector_size,
                 min_count=args.min_count,
-                iter=args.iterations,
+                epochs=args.iterations,
             )
             model1.init_sims(replace=True)
             model_path = paths.bootstrap_model_path(args.start_year, boot, args.model_prefix, args.year_interval)
