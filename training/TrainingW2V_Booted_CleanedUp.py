@@ -12,7 +12,7 @@ from gensim.models import Word2Vec
 from gensim.models.phrases import Phraser
 from nltk.tokenize import word_tokenize
 
-from path_config import add_path_arguments, build_path_config
+from config.path_config import add_path_arguments, build_path_config
 
 
 def write_booted_txt(paths, cyear: int, seed_no: int, output_path: Path):

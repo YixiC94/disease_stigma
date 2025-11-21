@@ -10,9 +10,9 @@ import numpy as np
 from gensim.models import KeyedVectors
 from sklearn.preprocessing import normalize
 
-import build_lexicon_stigma
-import dimension_stigma
-from path_config import add_path_arguments, build_path_config
+from data_prep import build_lexicon_stigma
+from analysis import dimension_stigma
+from config.path_config import add_path_arguments, build_path_config
 
 
 YEARS = [1980, 1983, 1986, 1989, 1992, 1995, 1998, 2001, 2004, 2007, 2010, 2013, 2016]

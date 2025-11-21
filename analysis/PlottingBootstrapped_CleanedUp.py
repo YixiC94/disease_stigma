@@ -9,7 +9,7 @@ import pandas as pd
 from pylab import rcParams
 import matplotlib.pyplot as plt
 
-from path_config import add_path_arguments, build_path_config
+from config.path_config import add_path_arguments, build_path_config
 
 rcParams["figure.figsize"] = (10, 6)
 

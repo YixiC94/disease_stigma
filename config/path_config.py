@@ -1,3 +1,5 @@
+"""Shared path configuration for the stigma workflow."""
+
 from dataclasses import dataclass
 from pathlib import Path
 import argparse
@@ -45,7 +47,7 @@ def add_path_arguments(
         "--raw-data-root",
         type=Path,
         required=require_raw_data_root,
-        default=Path.cwd() if not require_raw_data_root else None,
+        default=Path("data/raw"),
         help=(
             "Base directory containing NData_<year> folders with article pickles. "
             "Optional when a command does not read raw data."
@@ -61,7 +63,7 @@ def add_path_arguments(
         "--modeling-dir",
         type=Path,
         required=require_modeling_dir,
-        default=Path.cwd() if not require_modeling_dir else None,
+        default=Path("outputs/models"),
         help=(
             "Directory used for intermediate modeling artifacts (bigrams, bootstraps, and embeddings). "
             "Optional when only reading aggregated outputs."
@@ -70,31 +72,31 @@ def add_path_arguments(
     parser.add_argument(
         "--results-dir",
         type=Path,
-        default=Path.cwd(),
+        default=Path("outputs/results"),
         help="Directory where result CSVs and plots will be written.",
     )
     parser.add_argument(
         "--analyses-dir",
         type=Path,
-        default=Path.cwd(),
+        default=Path("analysis"),
         help="Base directory used for relative imports and ancillary files.",
     )
     parser.add_argument(
         "--lexicon-path",
         type=Path,
-        default=Path("Stigma_WordLists.csv"),
+        default=Path("data/Stigma_WordLists.csv"),
         help="Path to the stigma lexicon CSV.",
     )
     parser.add_argument(
         "--disease-list-path",
         type=Path,
-        default=Path("Disease_list_5.12.20_uncorrupted.csv"),
+        default=Path("data/Disease_list_5.12.20_uncorrupted.csv"),
         help="Path to the disease list CSV.",
     )
     parser.add_argument(
         "--personality-traits-path",
         type=Path,
-        default=Path("updated_personality_trait_list.csv"),
+        default=Path("data/updated_personality_trait_list.csv"),
         help="Path to the personality traits CSV.",
     )
 

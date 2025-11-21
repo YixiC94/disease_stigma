@@ -7,7 +7,7 @@ import argparse
 from pathlib import Path
 import pandas as pd
 
-from path_config import add_path_arguments, build_path_config
+from config.path_config import add_path_arguments, build_path_config
 
 YEARS = [1980, 1983, 1986, 1989, 1992, 1995, 1998, 2001, 2004, 2007, 2010, 2013, 2016]
 

@@ -10,7 +10,7 @@ from pathlib import Path
 from gensim.models import phrases
 from gensim.models.phrases import Phraser
 
-from path_config import add_path_arguments, build_path_config
+from config.path_config import add_path_arguments, build_path_config
 
 
 def load_articles(paths, curryear):
