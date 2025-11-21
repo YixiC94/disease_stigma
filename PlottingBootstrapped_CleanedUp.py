@@ -1,50 +1,98 @@
 # -*- coding: utf-8 -*-
 """
-Created on Mon Jan 31 10:23:36 2022
-
-@author: arsen
+Plot bootstrapped stigma scores by disease group.
 """
 
-
+import argparse
+from pathlib import Path
 import pandas as pd
-from pylab import rcParams, xlim
+from pylab import rcParams
 import matplotlib.pyplot as plt
-import os
 
-os.chdir('C:/Users/arsen/Dropbox/R01DiseaseStigma/RESULTS/LexisNexis_News') 
+from path_config import add_path_arguments, build_path_config
 
-
-dim = 'stigmaindex' #stigma, negpostraits, impurity, danger, disgust
-dat= pd.read_csv('C:/Users/arsen/Dropbox/R01DiseaseStigma/RESULTS/LexisNexis_News/' + str(dim) + '_aggregated_temp_92CI.csv')
-
-datanames= list(set(dat['PlottingGroup'].values)) #groups of diseases
-#datanames= ['addictions','autoimmune','behavioral','cancers','contested','eating disorders','genetic','infectious','mental','musculoskeletal','neurodevelopmental','neurological','other','stis','visual_auditory']
-mycolors=  ['Red', 'Green','Blue', 'Yellow', 'Orange',  'Black',  'Pink', 'Purple', 'Plum',  'DarkRed','Magenta',  'LimeGreen',  'Teal',  'Cyan',  'Goldenrod',
-            'DarkGrey', 'DarkOliveGreen', 'Gold', 'Wheat', 'Peru','Azure','DeepPink', 'LightCoral'] #21 custom chosen colors, since max 20 disease for a group, if add diseases then may need to add more colors
+rcParams["figure.figsize"] = (10, 6)
 
 
-######## PLOT STIGMA SCORES:  
-    #Each plot is for a specific disease group, with y axis is the score for this dimensions, and x axis is time. 
-    #Each disease in the group is plotted separately.
+def parse_arguments():
+    parser = argparse.ArgumentParser(description="Plot bootstrapped stigma scores with confidence intervals.")
+    add_path_arguments(parser, require_raw_data_root=False, require_modeling_dir=False)
+    parser.add_argument("--dimension", default="stigmaindex", help="Dimension file prefix to plot.")
+    parser.add_argument(
+        "--input-file",
+        type=Path,
+        default=None,
+        help="Aggregated CSV to plot (defaults to results dir/<dimension>_aggregated_temp_92CI.csv).",
+    )
+    parser.add_argument(
+        "--output-dir",
+        type=Path,
+        default=None,
+        help="Directory to store generated plots (defaults to results dir).",
+    )
+    return parser.parse_args()
 
 
+def main():
+    args = parse_arguments()
+    paths = build_path_config(args)
+    input_file = args.input_file or paths.aggregated_results_path(f"{args.dimension}_aggregated_temp_92CI.csv")
+    output_dir = args.output_dir or paths.results_dir
 
-for j in set(dat['PlottingGroup']):
-    print(j)
-    grouped= dat[dat['PlottingGroup']==j]
-    grouped= grouped[grouped['count']>19] #only plot if there are at least 19 bootstrapped models with this term
-    fig, ax = plt.subplots(1)    
-    for i in range(0, len(set(grouped['Reconciled_Name'].values))):
-        disease= list(set(grouped['Reconciled_Name'].values))[i]
-        #if len((grouped[grouped['Reconciled_Name']==str(disease)]['Year']))>9:     #only plot if there are at least 10 total time points/ models            
-        #ax.plot(grouped[grouped['Reconciled_Name']==str(disease)]['Year'], grouped[grouped['Reconciled_Name']==str(disease)]['mean'] , lw=2, label=str(disease), color=mycolors[i])
-        ax.plot(grouped[grouped['Reconciled_Name']==str(disease)]['Year'], grouped[grouped['Reconciled_Name']==str(disease)]['CI50%'] , lw=2, label=str(disease), color=mycolors[i])
-        ax.fill_between(grouped[grouped['Reconciled_Name']==str(disease)]['Year'], grouped[grouped['Reconciled_Name']==str(disease)]['CI4%'], grouped[grouped['Reconciled_Name']==str(disease)]['CI96%'], facecolor=mycolors[i], alpha=0.5)
-        
-    ax.set_title(str(dim) + r' of diseases in plotting proup: ' + str(j))
-    ax.legend(bbox_to_anchor=(1.05, 1.0), loc='upper left', ncol=1)
-    plt.savefig('C:/Users/arsen/Dropbox/R01DiseaseStigma/RESULTS/LexisNexis_News/' + str(j) + '_' + str(dim) + '_Diseases_92CI_median.jpg',  bbox_inches='tight')    
+    dat = pd.read_csv(input_file)
+    mycolors = [
+        "Red",
+        "Green",
+        "Blue",
+        "Yellow",
+        "Orange",
+        "Black",
+        "Pink",
+        "Purple",
+        "Plum",
+        "DarkRed",
+        "Magenta",
+        "LimeGreen",
+        "Teal",
+        "Cyan",
+        "Goldenrod",
+        "DarkGrey",
+        "DarkOliveGreen",
+        "Gold",
+        "Wheat",
+        "Peru",
+        "Azure",
+        "DeepPink",
+        "LightCoral",
+    ]
+
+    for j in set(dat["PlottingGroup"]):
+        grouped = dat[dat["PlottingGroup"] == j]
+        grouped = grouped[grouped["count"] > 19]
+        fig, ax = plt.subplots(1)
+        diseases = sorted(set(grouped["Reconciled_Name"].values))
+        for i, disease in enumerate(diseases):
+            ax.plot(
+                grouped[grouped["Reconciled_Name"] == disease]["Year"],
+                grouped[grouped["Reconciled_Name"] == disease]["CI50%"],
+                lw=2,
+                label=str(disease),
+                color=mycolors[i % len(mycolors)],
+            )
+            ax.fill_between(
+                grouped[grouped["Reconciled_Name"] == disease]["Year"],
+                grouped[grouped["Reconciled_Name"] == disease]["CI4%"],
+                grouped[grouped["Reconciled_Name"] == disease]["CI96%"],
+                facecolor=mycolors[i % len(mycolors)],
+                alpha=0.5,
+            )
+
+        ax.set_title(f"{args.dimension} of diseases in plotting group: {j}")
+        ax.legend(bbox_to_anchor=(1.05, 1.0), loc="upper left", ncol=1)
+        output_dir.mkdir(parents=True, exist_ok=True)
+        plt.savefig(output_dir / f"{j}_{args.dimension}_Diseases_92CI_median.jpg", bbox_inches="tight")
+        plt.close(fig)
 
 
-
-
+if __name__ == "__main__":
+    main()

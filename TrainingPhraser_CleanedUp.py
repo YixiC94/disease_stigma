@@ -1,46 +1,58 @@
 # -*- coding: utf-8 -*-
 """
-Created on Mon Jan 24 10:31:51 2022
-
-@author: arsen
+Train bigrammers on a sample of the data (run once per time window).
 """
 
-
-import time
-import pickle 
-from random import sample, seed, choices
-from gensim.models import Word2Vec, phrases 
-import cython
-from gensim.test.utils import datapath
+import argparse
+import pickle
+from random import sample
+from pathlib import Path
+from gensim.models import phrases
 from gensim.models.phrases import Phraser
-from nltk.tokenize import word_tokenize
+
+from path_config import add_path_arguments, build_path_config
 
 
-###### Train Bigrammers on a Sample of the Data (do just once per time window) ####
+def load_articles(paths, curryear):
+    sampled_articles_for_bigrammer = []
+    for year in [curryear, curryear + 1, curryear + 2]:
+        try:
+            with open(paths.raw_article_path(year), "rb") as file:
+                tfile_split = pickle.load(file)
+        except FileNotFoundError:
+            with open(paths.contemp_article_path(year), "rb") as file:
+                tfile_split = pickle.load(file)
 
-curryear=1992
-
-sampled_articles_for_bigrammer=[] #list of sentences, drawn from a sample of articles
-
-
-for i in [curryear, curryear+1, curryear+2]:
-    try:
-        file = open('C:/Users/arsen/Dropbox/R01DiseaseStigma/LexisNexisAPI_DataCollection/RawData_NotSynced_To_Desktop/NData_' + str(i) + '/all' + str(i)+ 'bodytexts_regexeddisamb_listofarticles', 'rb') #do earliest of the three years to latest
-    except:
-        file = open('C:/Users/arsen/Dropbox/R01DiseaseStigma/LexisNexisAPI_DataCollection/RawData_NotSynced_To_Desktop/ContempData_' + str(i) + '/all' + str(i)+ 'bodytexts_regexeddisamb_listofarticles', 'rb') #do earliest of the three years to latest
-    tfile_split= pickle.load(file)
-    file.close()  
-    samp_n= round(.75*len(tfile_split)) #sample size to sample the articles (next line) since there are so many articles
-    tfile_split= sample(tfile_split, samp_n) 
-
-    tfile_split= [i.split(' SENTENCEBOUNDARYHERE ') for i in tfile_split] #split the articles into sentences
-    for article in tfile_split:
-        for sentences_list in article:
-            sentences= sentences_list.split()
-            sampled_articles_for_bigrammer.append(sentences) #just adding the sentences themselves, using extend rather than append
+        samp_n = round(0.75 * len(tfile_split))
+        tfile_split = sample(tfile_split, samp_n)
+        tfile_split = [article.split(" SENTENCEBOUNDARYHERE ") for article in tfile_split]
+        for article in tfile_split:
+            for sentences_list in article:
+                sentences = sentences_list.split()
+                sampled_articles_for_bigrammer.append(sentences)
+    return sampled_articles_for_bigrammer
 
 
-bigram_transformer = phrases.Phrases(sampled_articles_for_bigrammer, min_count=50, threshold=12) #to TRAIN the bigrammer, input your "sentences" object with the cleaned text data. 
-# min count: Ignore all words and bigrams with total collected count lower than this value.
-bigram_transformer.save("C:/Users/arsen/Dropbox/R01DiseaseStigma/LexisNexisNews_Data_Modeling/bigrammer_" + str(curryear) + "_" + str(curryear+2))        
+def train_bigrammer(sampled_articles, save_path: Path):
+    save_path.parent.mkdir(parents=True, exist_ok=True)
+    bigram_transformer = phrases.Phrases(sampled_articles, min_count=50, threshold=12)
+    bigram_transformer.save(str(save_path))
 
+
+def parse_arguments():
+    parser = argparse.ArgumentParser(description="Train bigram models for a 3-year window.")
+    add_path_arguments(parser)
+    parser.add_argument("--year", type=int, default=1992, help="Start year of the 3-year window (e.g., 1992).")
+    return parser.parse_args()
+
+
+def main():
+    args = parse_arguments()
+    paths = build_path_config(args)
+
+    sampled_articles_for_bigrammer = load_articles(paths, args.year)
+    train_bigrammer(sampled_articles_for_bigrammer, paths.bigram_path(args.year))
+
+
+if __name__ == "__main__":
+    main()
