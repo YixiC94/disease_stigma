@@ -9,10 +9,11 @@ so downstream scripts can iterate over sentences.
 from __future__ import annotations
 
 import argparse
+import json
 import pickle
 import re
 from collections import defaultdict
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterable, Any
 import csv
@@ -76,13 +77,51 @@ def iter_rows(csv_path: Path, *, encoding: str) -> Iterable[dict[str, str]]:
             yield row
 
 
-def write_pickles(grouped_articles: dict[int, list[str]], output_root: Path) -> None:
+def write_pickles(
+    grouped_articles: dict[int, list[str]],
+    output_root: Path,
+    *,
+    basename_template: str,
+    write_manifest: bool,
+    manifest_name: str = "manifest.json",
+    source_csv: Path,
+    args: argparse.Namespace,
+) -> None:
     for year, articles in grouped_articles.items():
         year_dir = output_root / f"NData_{year}"
         year_dir.mkdir(parents=True, exist_ok=True)
-        pickle_path = year_dir / f"all{year}bodytexts_regexeddisamb_listofarticles"
+        pickle_name = basename_template.format(year=year)
+        pickle_path = year_dir / pickle_name
         with pickle_path.open("wb") as f:
             pickle.dump(articles, f)
+
+        if write_manifest:
+            manifest_path = year_dir / manifest_name
+            manifest = {
+                "year": year,
+                "pickle": pickle_name,
+                "article_count": len(articles),
+                "generated_at": datetime.now(timezone.utc).isoformat(),
+                "source_csv": str(source_csv),
+                "columns": {
+                    "title": args.title_column,
+                    "text": args.text_column,
+                    "date": args.date_column,
+                    "id": args.id_column,
+                },
+                "default_year": args.default_year,
+                "min_body_chars": args.min_body_chars,
+                "processing_steps": [
+                    "clean_text (collapse whitespace, strip)",
+                    "split_sentences (regex-based)",
+                    "join sentences with SENTENCEBOUNDARYHERE",
+                    "drop duplicates by id when provided",
+                    "drop empty rows",
+                    "drop rows below min_body_chars",
+                ],
+            }
+            with manifest_path.open("w", encoding="utf-8") as f:
+                json.dump(manifest, f, ensure_ascii=False, indent=2)
 
 
 def parse_args() -> argparse.Namespace:
@@ -106,6 +145,19 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         required=True,
         help="Root directory to write NData_<year>/all<year>bodytexts_regexeddisamb_listofarticles pickles.",
+    )
+    parser.add_argument(
+        "--output-basename",
+        default="all{year}bodytexts_regexeddisamb_listofarticles",
+        help=(
+            "Filename template for each year's pickle. Use '{year}' as a placeholder; "
+            "for example 'articles_{year}.pkl' produces shorter names."
+        ),
+    )
+    parser.add_argument(
+        "--write-manifest",
+        action="store_true",
+        help="Also write a manifest.json per year describing processing steps and parameters.",
     )
     parser.add_argument(
         "--encoding",
@@ -153,7 +205,14 @@ def main() -> None:
             continue
         grouped_articles[year].append(article_text)
 
-    write_pickles(grouped_articles, args.output_root)
+    write_pickles(
+        grouped_articles,
+        args.output_root,
+        basename_template=args.output_basename,
+        write_manifest=args.write_manifest,
+        source_csv=args.csv_path,
+        args=args,
+    )
 
     total_articles = sum(len(v) for v in grouped_articles.values())
     print(

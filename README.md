@@ -77,9 +77,14 @@ python prepare_corpus_from_csv.py \
   --id-column GOID \     # optional: drop duplicates with this column
   --min-body-chars 50 \  # optional: skip very short rows
   --encoding utf-8 \     # optional: override CSV encoding
+  --output-basename articles_{year}.pkl \  # optional: shorter filenames
+  --write-manifest \       # optional: write manifest.json describing processing steps
   --output-root /path/to/raw_data_root
 ```
 
 The script will create one pickle per year in `output-root`, matching the
 layout expected by `TrainingPhraser_CleanedUp.py` and
-`TrainingW2V_Booted_CleanedUp.py`.
+`TrainingW2V_Booted_CleanedUp.py`. If you override `--output-basename`, keep
+`{year}` in the template so each folder still contains a distinct file per year;
+`--write-manifest` adds a `manifest.json` per year to document the cleaning and
+splitting steps without encoding that history in the filename.
