@@ -1,309 +1,129 @@
 # -*- coding: utf-8 -*-
 """
-Created on Mon Jan 24 10:47:20 2022
-
-@author: arsen
+Compute stigma scores for diseases across multiple dimensions and bootstrapped models.
 """
 
-
+import argparse
+from pathlib import Path
 import pandas as pd
-import os
-from gensim.models import Word2Vec, KeyedVectors
 import numpy as np
+from gensim.models import KeyedVectors
 from sklearn.preprocessing import normalize
 
-os.chdir('C:/Users/arsen/Dropbox/R01DiseaseStigma/Analyses/') 
-import build_lexicon_stigma 
-#import word_lists_stigma #imported as a double check that this is in the working directory
+import build_lexicon_stigma
 import dimension_stigma
+from path_config import add_path_arguments, build_path_config
 
 
-def fold_word(target, second, wvmodel): #following the convex combination example on wiki
-    weight_target = wvmodel.wv.vocab[target].count / (wvmodel.wv.vocab[target].count  + wvmodel.wv.vocab[second].count) 
-    weight_second = wvmodel.wv.vocab[second].count / (wvmodel.wv.vocab[target].count  + wvmodel.wv.vocab[second].count) 
-    weighted_wv= (weight_target* normalize(wvmodel.wv[target].reshape(1,-1))  ) + (weight_second* normalize(wvmodel.wv[second].reshape(1,-1)) ) 
-    return ( normalize(weighted_wv) )
+YEARS = [1980, 1983, 1986, 1989, 1992, 1995, 1998, 2001, 2004, 2007, 2010, 2013, 2016]
+DEFAULT_BOOT_RANGE = range(25)
 
 
-################ Load in keyword lists from the file "Stigma_WordLists.csv")
-
-lexicon= pd.read_csv('C:/Users/arsen/Dropbox/R01DiseaseStigma/Lexicon/Stigma_WordLists.csv')
-lexicon= lexicon[lexicon['Removed']!='remove']
-
-dangerouswords= lexicon.loc[(lexicon['WhichPole'] == 'dangerous')]['Term'].str.lower().tolist() 
-safewords= lexicon.loc[(lexicon['WhichPole'] == 'safe')]['Term'].str.lower().tolist() 
-
-disgustingwords= lexicon.loc[(lexicon['WhichPole'] == 'disgusting')]['Term'].str.lower().tolist() 
-enticingwords= lexicon.loc[(lexicon['WhichPole'] == 'enticing')]['Term'].str.lower().tolist() 
-
-moralwords= lexicon.loc[(lexicon['WhichPole'] == 'moral')]['Term'].str.lower().tolist() 
-immoralwords= lexicon.loc[(lexicon['WhichPole'] == 'immoral')]['Term'].str.lower().tolist() 
-
-purewords= lexicon.loc[(lexicon['WhichPole'] == 'pure')]['Term'].str.lower().tolist() 
-impurewords= lexicon.loc[(lexicon['WhichPole'] == 'impure')]['Term'].str.lower().tolist() 
-    
-medwords= lexicon.loc[(lexicon['Concept_Term_Represents'] == 'medicalization')]['Term'].str.lower().tolist() 
+def parse_arguments():
+    parser = argparse.ArgumentParser(description="Write stigma scores for each dimension and time window.")
+    add_path_arguments(parser, require_raw_data_root=False)
+    parser.add_argument(
+        "--model-prefix",
+        type=str,
+        default="CBOW_300d__win10_min50_iter3",
+        help="Prefix used when loading bootstrapped Word2Vec/KeyedVector models.",
+    )
+    parser.add_argument(
+        "--output-dir",
+        type=Path,
+        default=None,
+        help="Directory for temporary per-dimension CSVs (defaults to --results-dir).",
+    )
+    return parser.parse_args()
 
 
-################ CSV with Danger Scores for Each Diseases from Each Model in Each Time Period
-
-for yr1 in [1980, 1983, 1986, 1989, 1992, 1995, 1998, 2001, 2004, 2007, 2010, 2013, 2016]:
-    diseases= pd.read_csv('C:/Users/arsen/Dropbox/R01DiseaseStigma/Disease_list_5.12.20_uncorrupted.csv')
-    diseases = diseases[ diseases['Plot'] == 'Yes' ]
-    diseases = diseases.drop_duplicates(subset=['Reconciled_Name'])
-    diseases = diseases[['PlottingGroup', 'Reconciled_Name']]
-    yr3=yr1 + 2
-    for bootnum in list(range(0,25)):
-        
-        currentmodel1= KeyedVectors.load('C:/Users/arsen/Dropbox/R01DiseaseStigma/LexisNexisNews_Data_Modeling/BootstrappedModels/' + str(yr1) + '_' + str(yr3) + '/CBOW_300d__win10_min50_iter3_'+ str(yr1)+ '_' + str(yr3) + "_boot" + str(bootnum)) #load in desired model
-
-        #adding in three post-hoc word-vectors. This is TEMPORARY and not changing the underlying model. 
-        epilepsy_folded = fold_word('epilepsy', 'epileptic', currentmodel1)
-        drug_addiction_folded = fold_word('drug_addiction', 'drug_addict', currentmodel1)
-        obesity_folded = fold_word('obesity', 'obese', currentmodel1)
-        
-        currentmodel1.wv.add('epilepsy_folded', epilepsy_folded)
-        currentmodel1.wv['drug_addiction_folded'] = drug_addiction_folded
-        currentmodel1.wv['obesity_folded'] = obesity_folded
-        
-        #need to also update the count since this is used to exclude certain diseases
-        currentmodel1.wv.vocab['epilepsy_folded'].count = currentmodel1.wv.vocab['epileptic'].count + currentmodel1.wv.vocab['epilepsy'].count
-        currentmodel1.wv.vocab['drug_addiction_folded'].count = currentmodel1.wv.vocab['drug_addict'].count + currentmodel1.wv.vocab['drug_addiction'].count
-        currentmodel1.wv.vocab['obesity_folded'].count = currentmodel1.wv.vocab['obese'].count + currentmodel1.wv.vocab['obesity'].count
-        
-        
-        #Danger (Dimension)
-        dangerwords_curr=  build_lexicon_stigma.dimension_lexicon( currentmodel1,  dangerouswords,  safewords)
-        danger= dimension_stigma.dimension(dangerwords_curr,'larsen') 
-        allwordssims_danger= danger.cos_sim(list(currentmodel1.wv.vocab),returnNAs=False)
-        diseases['danger_score_stdized'+  '_' +str(bootnum)]= diseases['Reconciled_Name'].apply(lambda x: ((danger.cos_sim([str(x).lower()], returnNAs=True)[0])- np.mean(allwordssims_danger))/np.std(allwordssims_danger))
-    diseases['Year']= [str(yr1)] * len(diseases)
-    dimension_to_plot = 'danger'
-    diseases = pd.melt(diseases[['Reconciled_Name', 'PlottingGroup', 'Year',  str(dimension_to_plot + '_score_stdized_0'), str(dimension_to_plot + '_score_stdized_1'), str(dimension_to_plot + '_score_stdized_2'), str(dimension_to_plot + '_score_stdized_3'),
-                                 str(dimension_to_plot + '_score_stdized_4'), str(dimension_to_plot + '_score_stdized_5'), str(dimension_to_plot + '_score_stdized_6'), str(dimension_to_plot + '_score_stdized_7'), str(dimension_to_plot + '_score_stdized_8'), str(dimension_to_plot + '_score_stdized_9'), 
-                                 str(dimension_to_plot + '_score_stdized_10'), str(dimension_to_plot + '_score_stdized_11'), str(dimension_to_plot + '_score_stdized_12'), str(dimension_to_plot + '_score_stdized_13'), str(dimension_to_plot + '_score_stdized_14'), 
-                                  str(dimension_to_plot + '_score_stdized_15'), str(dimension_to_plot + '_score_stdized_16'), str(dimension_to_plot + '_score_stdized_17'), str(dimension_to_plot + '_score_stdized_18'), 
-                                 str(dimension_to_plot + '_score_stdized_19'), str(dimension_to_plot + '_score_stdized_20'), str(dimension_to_plot + '_score_stdized_21'), str(dimension_to_plot + '_score_stdized_22'), str(dimension_to_plot + '_score_stdized_23'), 
-                                 str(dimension_to_plot + '_score_stdized_24') ]],
-                    id_vars=['Reconciled_Name', 'PlottingGroup', 'Year',],var_name='BootNumber', value_name= dimension_to_plot)
-    diseases.to_csv('temp' + str(dimension_to_plot) + str(yr1) + '.csv')
+def fold_word(target, second, wvmodel):
+    weight_target = wvmodel.wv.vocab[target].count / (wvmodel.wv.vocab[target].count + wvmodel.wv.vocab[second].count)
+    weight_second = wvmodel.wv.vocab[second].count / (wvmodel.wv.vocab[target].count + wvmodel.wv.vocab[second].count)
+    weighted_wv = (weight_target * normalize(wvmodel.wv[target].reshape(1, -1))) + (
+        weight_second * normalize(wvmodel.wv[second].reshape(1, -1))
+    )
+    return normalize(weighted_wv)
 
 
-################ CSV with Disgust Scores for Each Diseases from Each Model in Each Time Period
+def add_folded_terms(model):
+    epilepsy_folded = fold_word("epilepsy", "epileptic", model)
+    drug_addiction_folded = fold_word("drug_addiction", "drug_addict", model)
+    obesity_folded = fold_word("obesity", "obese", model)
 
-for yr1 in [1980, 1983, 1986, 1989, 1992, 1995, 1998, 2001, 2004, 2007, 2010, 2013, 2016]:
-    diseases= pd.read_csv('C:/Users/arsen/Dropbox/R01DiseaseStigma/Disease_list_5.12.20_uncorrupted.csv')
-    diseases = diseases[ diseases['Plot'] == 'Yes' ]
-    diseases = diseases.drop_duplicates(subset=['Reconciled_Name'])
-    diseases = diseases[['PlottingGroup', 'Reconciled_Name']]
-    yr3=yr1 + 2
-    for bootnum in list(range(0,25)):
-        
-        currentmodel1= KeyedVectors.load('C:/Users/arsen/Dropbox/R01DiseaseStigma/LexisNexisNews_Data_Modeling/BootstrappedModels/' + str(yr1) + '_' + str(yr3) + '/CBOW_300d__win10_min50_iter3_'+ str(yr1)+ '_' + str(yr3) + "_boot" + str(bootnum)) #load in desired model
+    model.wv.add("epilepsy_folded", epilepsy_folded)
+    model.wv["drug_addiction_folded"] = drug_addiction_folded
+    model.wv["obesity_folded"] = obesity_folded
 
-        #adding in three post-hoc word-vectors. This is TEMPORARY and not changing the underlying model. 
-        epilepsy_folded = fold_word('epilepsy', 'epileptic', currentmodel1)
-        drug_addiction_folded = fold_word('drug_addiction', 'drug_addict', currentmodel1)
-        obesity_folded = fold_word('obesity', 'obese', currentmodel1)
-        
-        currentmodel1.wv.add('epilepsy_folded', epilepsy_folded)
-        currentmodel1.wv['drug_addiction_folded'] = drug_addiction_folded
-        currentmodel1.wv['obesity_folded'] = obesity_folded
-        
-        #need to also update the count since this is used to exclude certain diseases
-        currentmodel1.wv.vocab['epilepsy_folded'].count = currentmodel1.wv.vocab['epileptic'].count + currentmodel1.wv.vocab['epilepsy'].count
-        currentmodel1.wv.vocab['drug_addiction_folded'].count = currentmodel1.wv.vocab['drug_addict'].count + currentmodel1.wv.vocab['drug_addiction'].count
-        currentmodel1.wv.vocab['obesity_folded'].count = currentmodel1.wv.vocab['obese'].count + currentmodel1.wv.vocab['obesity'].count
-        
-        #Disgust (Dimension)
-        disgustwords_curr=  build_lexicon_stigma.dimension_lexicon( currentmodel1,  disgustingwords,  enticingwords)
-        disgust= dimension_stigma.dimension(disgustwords_curr,'larsen') 
-        allwordssims_disgust= disgust.cos_sim(list(currentmodel1.wv.vocab),returnNAs=False)
-        diseases['disgust_score_stdized'+  '_' +str(bootnum)]= diseases['Reconciled_Name'].apply(lambda x: ((disgust.cos_sim([str(x).lower()], returnNAs=True)[0])- np.mean(allwordssims_disgust))/np.std(allwordssims_disgust))      
-    diseases['Year']= [str(yr1)] * len(diseases)
-    dimension_to_plot = 'disgust'   
-    diseases = pd.melt(diseases[['Reconciled_Name', 'PlottingGroup', 'Year',  str(dimension_to_plot + '_score_stdized_0'), str(dimension_to_plot + '_score_stdized_1'), str(dimension_to_plot + '_score_stdized_2'), str(dimension_to_plot + '_score_stdized_3'),
-                                 str(dimension_to_plot + '_score_stdized_4'), str(dimension_to_plot + '_score_stdized_5'), str(dimension_to_plot + '_score_stdized_6'), str(dimension_to_plot + '_score_stdized_7'), str(dimension_to_plot + '_score_stdized_8'), str(dimension_to_plot + '_score_stdized_9'), 
-                                 str(dimension_to_plot + '_score_stdized_10'), str(dimension_to_plot + '_score_stdized_11'), str(dimension_to_plot + '_score_stdized_12'), str(dimension_to_plot + '_score_stdized_13'), str(dimension_to_plot + '_score_stdized_14'), 
-                                  str(dimension_to_plot + '_score_stdized_15'), str(dimension_to_plot + '_score_stdized_16'), str(dimension_to_plot + '_score_stdized_17'), str(dimension_to_plot + '_score_stdized_18'), 
-                                 str(dimension_to_plot + '_score_stdized_19'), str(dimension_to_plot + '_score_stdized_20'), str(dimension_to_plot + '_score_stdized_21'), str(dimension_to_plot + '_score_stdized_22'), str(dimension_to_plot + '_score_stdized_23'), 
-                                 str(dimension_to_plot + '_score_stdized_24') ]],
-                    id_vars=['Reconciled_Name', 'PlottingGroup', 'Year',],var_name='BootNumber', value_name= dimension_to_plot)
-    diseases.to_csv('temp' + str(dimension_to_plot) + str(yr1) + '.csv')
+    model.wv.vocab["epilepsy_folded"].count = model.wv.vocab["epileptic"].count + model.wv.vocab["epilepsy"].count
+    model.wv.vocab["drug_addiction_folded"].count = model.wv.vocab["drug_addict"].count + model.wv.vocab["drug_addiction"].count
+    model.wv.vocab["obesity_folded"].count = model.wv.vocab["obese"].count + model.wv.vocab["obesity"].count
 
-################ CSV with Immoral Scores for Each Diseases from Each Model in Each Time Period
+    return model
 
-for yr1 in [1980, 1983, 1986, 1989, 1992, 1995, 1998, 2001, 2004, 2007, 2010, 2013, 2016]:
-    diseases= pd.read_csv('C:/Users/arsen/Dropbox/R01DiseaseStigma/Disease_list_5.12.20_uncorrupted.csv')
-    diseases = diseases[ diseases['Plot'] == 'Yes' ]
-    diseases = diseases.drop_duplicates(subset=['Reconciled_Name'])
-    diseases = diseases[['PlottingGroup', 'Reconciled_Name']]
-    yr3=yr1 + 2
-    for bootnum in list(range(0,25)):
-        currentmodel1= KeyedVectors.load('C:/Users/arsen/Dropbox/R01DiseaseStigma/LexisNexisNews_Data_Modeling/BootstrappedModels/' + str(yr1) + '_' + str(yr3) + '/CBOW_300d__win10_min50_iter3_'+ str(yr1)+ '_' + str(yr3) + "_boot" + str(bootnum)) #load in desired model
 
-        #adding in three post-hoc word-vectors. This is TEMPORARY and not changing the underlying model. 
-        epilepsy_folded = fold_word('epilepsy', 'epileptic', currentmodel1)
-        drug_addiction_folded = fold_word('drug_addiction', 'drug_addict', currentmodel1)
-        obesity_folded = fold_word('obesity', 'obese', currentmodel1)
-        
-        currentmodel1.wv.add('epilepsy_folded', epilepsy_folded)
-        currentmodel1.wv['drug_addiction_folded'] = drug_addiction_folded
-        currentmodel1.wv['obesity_folded'] = obesity_folded
-        
-        #need to also update the count since this is used to exclude certain diseases
-        currentmodel1.wv.vocab['epilepsy_folded'].count = currentmodel1.wv.vocab['epileptic'].count + currentmodel1.wv.vocab['epilepsy'].count
-        currentmodel1.wv.vocab['drug_addiction_folded'].count = currentmodel1.wv.vocab['drug_addict'].count + currentmodel1.wv.vocab['drug_addiction'].count
-        currentmodel1.wv.vocab['obesity_folded'].count = currentmodel1.wv.vocab['obese'].count + currentmodel1.wv.vocab['obesity'].count
-        
-        #Immorality (Dimension)
-        moralitywords_curr=  build_lexicon_stigma.dimension_lexicon( currentmodel1,  immoralwords,  moralwords)
-        morality= dimension_stigma.dimension(moralitywords_curr,'larsen') 
-        allwordssims_morality= morality.cos_sim(list(currentmodel1.wv.vocab),returnNAs=False)
-        diseases['immorality_score_stdized'+  '_' +str(bootnum)]= diseases['Reconciled_Name'].apply(lambda x: ((morality.cos_sim([str(x).lower()], returnNAs=True)[0])- np.mean(allwordssims_morality))/np.std(allwordssims_morality))
-    diseases['Year']= [str(yr1)] * len(diseases)
-    dimension_to_plot = 'immorality' 
-    diseases = pd.melt(diseases[['Reconciled_Name', 'PlottingGroup', 'Year',  str(dimension_to_plot + '_score_stdized_0'), str(dimension_to_plot + '_score_stdized_1'), str(dimension_to_plot + '_score_stdized_2'), str(dimension_to_plot + '_score_stdized_3'),
-                                 str(dimension_to_plot + '_score_stdized_4'), str(dimension_to_plot + '_score_stdized_5'), str(dimension_to_plot + '_score_stdized_6'), str(dimension_to_plot + '_score_stdized_7'), str(dimension_to_plot + '_score_stdized_8'), str(dimension_to_plot + '_score_stdized_9'), 
-                                 str(dimension_to_plot + '_score_stdized_10'), str(dimension_to_plot + '_score_stdized_11'), str(dimension_to_plot + '_score_stdized_12'), str(dimension_to_plot + '_score_stdized_13'), str(dimension_to_plot + '_score_stdized_14'), 
-                                  str(dimension_to_plot + '_score_stdized_15'), str(dimension_to_plot + '_score_stdized_16'), str(dimension_to_plot + '_score_stdized_17'), str(dimension_to_plot + '_score_stdized_18'), 
-                                 str(dimension_to_plot + '_score_stdized_19'), str(dimension_to_plot + '_score_stdized_20'), str(dimension_to_plot + '_score_stdized_21'), str(dimension_to_plot + '_score_stdized_22'), str(dimension_to_plot + '_score_stdized_23'), 
-                                 str(dimension_to_plot + '_score_stdized_24') ]],
-                    id_vars=['Reconciled_Name', 'PlottingGroup', 'Year',],var_name='BootNumber', value_name= dimension_to_plot)
-    diseases.to_csv('temp' + str(dimension_to_plot) + str(yr1) + '.csv')
+def melt_dimension_scores(diseases, dimension_to_plot):
+    score_columns = [f"{dimension_to_plot}_score_stdized_{i}" for i in DEFAULT_BOOT_RANGE]
+    return pd.melt(
+        diseases[["Reconciled_Name", "PlottingGroup", "Year", *score_columns]],
+        id_vars=["Reconciled_Name", "PlottingGroup", "Year"],
+        var_name="BootNumber",
+        value_name=dimension_to_plot,
+    )
 
-################ CSV with Impure Scores for Each Diseases from Each Model in Each Time Period
 
-for yr1 in [1980, 1983, 1986, 1989, 1992, 1995, 1998, 2001, 2004, 2007, 2010, 2013, 2016]:
-    diseases= pd.read_csv('C:/Users/arsen/Dropbox/R01DiseaseStigma/Disease_list_5.12.20_uncorrupted.csv')
-    diseases = diseases[ diseases['Plot'] == 'Yes' ]
-    diseases = diseases.drop_duplicates(subset=['Reconciled_Name'])
-    diseases = diseases[['PlottingGroup', 'Reconciled_Name']]
-    yr3=yr1 + 2
-    for bootnum in list(range(0,25)):       
-        currentmodel1= KeyedVectors.load('C:/Users/arsen/Dropbox/R01DiseaseStigma/LexisNexisNews_Data_Modeling/BootstrappedModels/' + str(yr1) + '_' + str(yr3) + '/CBOW_300d__win10_min50_iter3_'+ str(yr1)+ '_' + str(yr3) + "_boot" + str(bootnum)) #load in desired model
+def load_diseases(paths):
+    diseases = pd.read_csv(paths.disease_list_path)
+    diseases = diseases[diseases["Plot"] == "Yes"]
+    diseases = diseases.drop_duplicates(subset=["Reconciled_Name"])
+    return diseases[["PlottingGroup", "Reconciled_Name"]].copy()
 
-        #adding in three post-hoc word-vectors. This is TEMPORARY and not changing the underlying model. 
-        epilepsy_folded = fold_word('epilepsy', 'epileptic', currentmodel1)
-        drug_addiction_folded = fold_word('drug_addiction', 'drug_addict', currentmodel1)
-        obesity_folded = fold_word('obesity', 'obese', currentmodel1)
-        
-        currentmodel1.wv.add('epilepsy_folded', epilepsy_folded)
-        currentmodel1.wv['drug_addiction_folded'] = drug_addiction_folded
-        currentmodel1.wv['obesity_folded'] = obesity_folded
-        
-        #need to also update the count since this is used to exclude certain diseases
-        currentmodel1.wv.vocab['epilepsy_folded'].count = currentmodel1.wv.vocab['epileptic'].count + currentmodel1.wv.vocab['epilepsy'].count
-        currentmodel1.wv.vocab['drug_addiction_folded'].count = currentmodel1.wv.vocab['drug_addict'].count + currentmodel1.wv.vocab['drug_addiction'].count
-        currentmodel1.wv.vocab['obesity_folded'].count = currentmodel1.wv.vocab['obese'].count + currentmodel1.wv.vocab['obesity'].count
-        
-        #Impurity (Dimension)
-        puritywords_curr=  build_lexicon_stigma.dimension_lexicon( currentmodel1,  impurewords, purewords)
-        purity= dimension_stigma.dimension(puritywords_curr,'larsen') 
-        allwordssims_purity= purity.cos_sim(list(currentmodel1.wv.vocab),returnNAs=False)
-        diseases['impurity_score_stdized'+  '_' +str(bootnum)]= diseases['Reconciled_Name'].apply(lambda x: ((purity.cos_sim([str(x).lower()], returnNAs=True)[0])- np.mean(allwordssims_purity))/np.std(allwordssims_purity))
-    diseases['Year']= [str(yr1)] * len(diseases)
-    dimension_to_plot = 'impurity'
-    diseases = pd.melt(diseases[['Reconciled_Name', 'PlottingGroup', 'Year',  str(dimension_to_plot + '_score_stdized_0'), str(dimension_to_plot + '_score_stdized_1'), str(dimension_to_plot + '_score_stdized_2'), str(dimension_to_plot + '_score_stdized_3'),
-                                 str(dimension_to_plot + '_score_stdized_4'), str(dimension_to_plot + '_score_stdized_5'), str(dimension_to_plot + '_score_stdized_6'), str(dimension_to_plot + '_score_stdized_7'), str(dimension_to_plot + '_score_stdized_8'), str(dimension_to_plot + '_score_stdized_9'), 
-                                 str(dimension_to_plot + '_score_stdized_10'), str(dimension_to_plot + '_score_stdized_11'), str(dimension_to_plot + '_score_stdized_12'), str(dimension_to_plot + '_score_stdized_13'), str(dimension_to_plot + '_score_stdized_14'), 
-                                  str(dimension_to_plot + '_score_stdized_15'), str(dimension_to_plot + '_score_stdized_16'), str(dimension_to_plot + '_score_stdized_17'), str(dimension_to_plot + '_score_stdized_18'), 
-                                 str(dimension_to_plot + '_score_stdized_19'), str(dimension_to_plot + '_score_stdized_20'), str(dimension_to_plot + '_score_stdized_21'), str(dimension_to_plot + '_score_stdized_22'), str(dimension_to_plot + '_score_stdized_23'), 
-                                 str(dimension_to_plot + '_score_stdized_24') ]],
-                    id_vars=['Reconciled_Name', 'PlottingGroup', 'Year',],var_name='BootNumber', value_name= dimension_to_plot)
-    
-    diseases.to_csv('temp' + str(dimension_to_plot) + str(yr1) + '.csv')
-    
-################ CSV with NegPosTraits Scores for Each Diseases from Each Model in Each Time Period
 
-for yr1 in [1980, 1983, 1986, 1989, 1992, 1995, 1998, 2001, 2004, 2007, 2010, 2013, 2016]:
-    diseases= pd.read_csv('C:/Users/arsen/Dropbox/R01DiseaseStigma/Disease_list_5.12.20_uncorrupted.csv')
-    diseases = diseases[ diseases['Plot'] == 'Yes' ]
-    diseases = diseases.drop_duplicates(subset=['Reconciled_Name'])
-    diseases = diseases[['PlottingGroup', 'Reconciled_Name']]
-    yr3=yr1 + 2
-    for bootnum in list(range(0,25)):
-        
-        currentmodel1= KeyedVectors.load('C:/Users/arsen/Dropbox/R01DiseaseStigma/LexisNexisNews_Data_Modeling/BootstrappedModels/' + str(yr1) + '_' + str(yr3) + '/CBOW_300d__win10_min50_iter3_'+ str(yr1)+ '_' + str(yr3) + "_boot" + str(bootnum)) #load in desired model
+def compute_dimension_scores(paths, years, dimension_name, positive_terms, negative_terms, model_prefix, output_dir: Path):
+    for yr1 in years:
+        diseases = load_diseases(paths)
+        for bootnum in DEFAULT_BOOT_RANGE:
+            model_path = paths.bootstrap_model_path(yr1, bootnum, model_prefix)
+            currentmodel1 = KeyedVectors.load(str(model_path))
+            add_folded_terms(currentmodel1)
+            dimension_words = build_lexicon_stigma.dimension_lexicon(currentmodel1, positive_terms, negative_terms)
+            dimension_obj = dimension_stigma.dimension(dimension_words, "larsen")
+            allwordssims = dimension_obj.cos_sim(list(currentmodel1.wv.vocab), returnNAs=False)
+            diseases[f"{dimension_name}_score_stdized_{bootnum}"] = diseases["Reconciled_Name"].apply(
+                lambda x: (dimension_obj.cos_sim([str(x).lower()], returnNAs=True)[0] - np.mean(allwordssims))
+                / np.std(allwordssims)
+            )
+        diseases["Year"] = [str(yr1)] * len(diseases)
+        melted = melt_dimension_scores(diseases, dimension_name)
+        output_dir.mkdir(parents=True, exist_ok=True)
+        melted.to_csv(output_dir / f"temp{dimension_name}{yr1}.csv")
 
-        #adding in three post-hoc word-vectors. This is TEMPORARY and not changing the underlying model. 
-        epilepsy_folded = fold_word('epilepsy', 'epileptic', currentmodel1)
-        drug_addiction_folded = fold_word('drug_addiction', 'drug_addict', currentmodel1)
-        obesity_folded = fold_word('obesity', 'obese', currentmodel1)
-        
-        currentmodel1.wv.add('epilepsy_folded', epilepsy_folded)
-        currentmodel1.wv['drug_addiction_folded'] = drug_addiction_folded
-        currentmodel1.wv['obesity_folded'] = obesity_folded
-        
-        #need to also update the count since this is used to exclude certain diseases
-        currentmodel1.wv.vocab['epilepsy_folded'].count = currentmodel1.wv.vocab['epileptic'].count + currentmodel1.wv.vocab['epilepsy'].count
-        currentmodel1.wv.vocab['drug_addiction_folded'].count = currentmodel1.wv.vocab['drug_addict'].count + currentmodel1.wv.vocab['drug_addiction'].count
-        currentmodel1.wv.vocab['obesity_folded'].count = currentmodel1.wv.vocab['obese'].count + currentmodel1.wv.vocab['obesity'].count
-        
-        #NegTraits - PosTraits (Dimension)
-        negtraits= pd.read_csv('C:/Users/arsen/Dropbox/R01DiseaseStigma/Lexicon/Personality traits/updated_personality_trait_list.csv')
-        negtraits['Adjective']= negtraits['Adjective'].str.lower()
-        negtraits['Adjective']= negtraits['Adjective'].str.strip()
-        negtraits= negtraits.drop_duplicates(subset=  'Adjective')
-        
-        negwords= negtraits[negtraits['Sentiment']=='neg']['Adjective'].tolist()
-        poswords= negtraits[negtraits['Sentiment']=='pos']['Adjective'].tolist()
-        
-        negposwords_curr=  build_lexicon_stigma.dimension_lexicon( currentmodel1,  negwords,  poswords)
-        negpos= dimension_stigma.dimension(negposwords_curr,'larsen') 
-        allwordssims_negpos= negpos.cos_sim(list(currentmodel1.wv.vocab),returnNAs=False)
-        diseases['negpostraits_score_stdized'+  '_' +str(bootnum)]= diseases['Reconciled_Name'].apply(lambda x: ((negpos.cos_sim([str(x).lower()], returnNAs=True)[0])- np.mean(allwordssims_negpos))/np.std(allwordssims_negpos))
 
-    diseases['Year']= [str(yr1)] * len(diseases)
-    dimension_to_plot = 'negpostraits'    
-    diseases = pd.melt(diseases[['Reconciled_Name', 'PlottingGroup', 'Year',  str(dimension_to_plot + '_score_stdized_0'), str(dimension_to_plot + '_score_stdized_1'), str(dimension_to_plot + '_score_stdized_2'), str(dimension_to_plot + '_score_stdized_3'),
-                                 str(dimension_to_plot + '_score_stdized_4'), str(dimension_to_plot + '_score_stdized_5'), str(dimension_to_plot + '_score_stdized_6'), str(dimension_to_plot + '_score_stdized_7'), str(dimension_to_plot + '_score_stdized_8'), str(dimension_to_plot + '_score_stdized_9'), 
-                                 str(dimension_to_plot + '_score_stdized_10'), str(dimension_to_plot + '_score_stdized_11'), str(dimension_to_plot + '_score_stdized_12'), str(dimension_to_plot + '_score_stdized_13'), str(dimension_to_plot + '_score_stdized_14'), 
-                                  str(dimension_to_plot + '_score_stdized_15'), str(dimension_to_plot + '_score_stdized_16'), str(dimension_to_plot + '_score_stdized_17'), str(dimension_to_plot + '_score_stdized_18'), 
-                                 str(dimension_to_plot + '_score_stdized_19'), str(dimension_to_plot + '_score_stdized_20'), str(dimension_to_plot + '_score_stdized_21'), str(dimension_to_plot + '_score_stdized_22'), str(dimension_to_plot + '_score_stdized_23'), 
-                                 str(dimension_to_plot + '_score_stdized_24') ]],
-                    id_vars=['Reconciled_Name', 'PlottingGroup', 'Year',],var_name='BootNumber', value_name= dimension_to_plot)
-    
-    diseases.to_csv('temp' + str(dimension_to_plot) + str(yr1) + '.csv')
-    
-################ CSV with Medicalization Scores for Each Diseases from Each Model in Each Time Period
+def main():
+    args = parse_arguments()
+    paths = build_path_config(args)
+    output_dir = args.output_dir or args.results_dir
 
-for yr1 in [1980, 1983, 1986, 1989, 1992, 1995, 1998, 2001, 2004, 2007, 2010, 2013, 2016]:
-    diseases= pd.read_csv('C:/Users/arsen/Dropbox/R01DiseaseStigma/Disease_list_5.12.20_uncorrupted.csv')
-    diseases = diseases[ diseases['Plot'] == 'Yes' ]
-    diseases = diseases.drop_duplicates(subset=['Reconciled_Name'])
-    diseases = diseases[['PlottingGroup', 'Reconciled_Name']]
-    yr3=yr1 + 2
-    for bootnum in list(range(0,25)):
-        currentmodel1= KeyedVectors.load('C:/Users/arsen/Dropbox/R01DiseaseStigma/LexisNexisNews_Data_Modeling/BootstrappedModels/' + str(yr1) + '_' + str(yr3) + '/CBOW_300d__win10_min50_iter3_'+ str(yr1)+ '_' + str(yr3) + "_boot" + str(bootnum)) #load in desired model
+    lexicon = pd.read_csv(paths.lexicon_path)
+    lexicon = lexicon[lexicon["Removed"] != "remove"]
 
-        #adding in three post-hoc word-vectors. This is TEMPORARY and not changing the underlying model. 
-        epilepsy_folded = fold_word('epilepsy', 'epileptic', currentmodel1)
-        drug_addiction_folded = fold_word('drug_addiction', 'drug_addict', currentmodel1)
-        obesity_folded = fold_word('obesity', 'obese', currentmodel1)
-        
-        currentmodel1.wv.add('epilepsy_folded', epilepsy_folded)
-        currentmodel1.wv['drug_addiction_folded'] = drug_addiction_folded
-        currentmodel1.wv['obesity_folded'] = obesity_folded
-        
-        #need to also update the count since this is used to exclude certain diseases
-        currentmodel1.wv.vocab['epilepsy_folded'].count = currentmodel1.wv.vocab['epileptic'].count + currentmodel1.wv.vocab['epilepsy'].count
-        currentmodel1.wv.vocab['drug_addiction_folded'].count = currentmodel1.wv.vocab['drug_addict'].count + currentmodel1.wv.vocab['drug_addiction'].count
-        currentmodel1.wv.vocab['obesity_folded'].count = currentmodel1.wv.vocab['obese'].count + currentmodel1.wv.vocab['obesity'].count
-                
-        #Medicalization (Cluster)
-        medwords_curr= build_lexicon_stigma.dimension_lexicon( currentmodel1, medwords) #cluster
-        med = dimension_stigma.dimension(medwords_curr,'cluster')
-        allwordssims_med= med.cos_sim(list(currentmodel1.wv.vocab),returnNAs=False)
-        diseases['med_score_stdized'+  '_' +str(bootnum)]= diseases['Reconciled_Name'].apply(lambda x: ((med.cos_sim([str(x).lower()], returnNAs=True)[0])- np.mean(allwordssims_med))/np.std(allwordssims_med))
-    diseases['Year']= [str(yr1)] * len(diseases)
-    dimension_to_plot = 'med'
-    diseases = pd.melt(diseases[['Reconciled_Name', 'PlottingGroup', 'Year',  str(dimension_to_plot + '_score_stdized_0'), str(dimension_to_plot + '_score_stdized_1'), str(dimension_to_plot + '_score_stdized_2'), str(dimension_to_plot + '_score_stdized_3'),
-                                 str(dimension_to_plot + '_score_stdized_4'), str(dimension_to_plot + '_score_stdized_5'), str(dimension_to_plot + '_score_stdized_6'), str(dimension_to_plot + '_score_stdized_7'), str(dimension_to_plot + '_score_stdized_8'), str(dimension_to_plot + '_score_stdized_9'), 
-                                 str(dimension_to_plot + '_score_stdized_10'), str(dimension_to_plot + '_score_stdized_11'), str(dimension_to_plot + '_score_stdized_12'), str(dimension_to_plot + '_score_stdized_13'), str(dimension_to_plot + '_score_stdized_14'), 
-                                  str(dimension_to_plot + '_score_stdized_15'), str(dimension_to_plot + '_score_stdized_16'), str(dimension_to_plot + '_score_stdized_17'), str(dimension_to_plot + '_score_stdized_18'), 
-                                 str(dimension_to_plot + '_score_stdized_19'), str(dimension_to_plot + '_score_stdized_20'), str(dimension_to_plot + '_score_stdized_21'), str(dimension_to_plot + '_score_stdized_22'), str(dimension_to_plot + '_score_stdized_23'), 
-                                 str(dimension_to_plot + '_score_stdized_24') ]],
-                    id_vars=['Reconciled_Name', 'PlottingGroup', 'Year',],var_name='BootNumber', value_name= dimension_to_plot)
-    
-    diseases.to_csv('temp' + str(dimension_to_plot) + str(yr1) + '.csv')
+    dangerouswords = lexicon.loc[(lexicon["WhichPole"] == "dangerous")]["Term"].str.lower().tolist()
+    safewords = lexicon.loc[(lexicon["WhichPole"] == "safe")]["Term"].str.lower().tolist()
+
+    disgustingwords = lexicon.loc[(lexicon["WhichPole"] == "disgusting")]["Term"].str.lower().tolist()
+    enticingwords = lexicon.loc[(lexicon["WhichPole"] == "enticing")]["Term"].str.lower().tolist()
+
+    moralwords = lexicon.loc[(lexicon["WhichPole"] == "moral")]["Term"].str.lower().tolist()
+    immoralwords = lexicon.loc[(lexicon["WhichPole"] == "immoral")]["Term"].str.lower().tolist()
+
+    purewords = lexicon.loc[(lexicon["WhichPole"] == "pure")]["Term"].str.lower().tolist()
+    impurewords = lexicon.loc[(lexicon["WhichPole"] == "impure")]["Term"].str.lower().tolist()
+
+    compute_dimension_scores(paths, YEARS, "danger", dangerouswords, safewords, args.model_prefix, output_dir)
+    compute_dimension_scores(paths, YEARS, "disgust", disgustingwords, enticingwords, args.model_prefix, output_dir)
+    compute_dimension_scores(paths, YEARS, "immorality", immoralwords, moralwords, args.model_prefix, output_dir)
+    compute_dimension_scores(paths, YEARS, "impurity", impurewords, purewords, args.model_prefix, output_dir)
+
+
+if __name__ == "__main__":
+    main()

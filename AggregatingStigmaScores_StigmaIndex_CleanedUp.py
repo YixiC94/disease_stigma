@@ -1,188 +1,80 @@
 # -*- coding: utf-8 -*-
 """
-Created on Thu Jan 27 10:22:48 2022
-
-@author: arsen
+Aggregate bootstrapped stigma dimensions into a single stigma index.
 """
 
+import argparse
+from functools import reduce
+from pathlib import Path
 import pandas as pd
-import os
-os.chdir('C:/Users/arsen/Dropbox/R01DiseaseStigma/Analyses/') 
+
+from path_config import add_path_arguments, build_path_config
+
+YEARS = [1980, 1983, 1986, 1989, 1992, 1995, 1998, 2001, 2004, 2007, 2010, 2013, 2016]
+DEFAULT_DIMENSIONS = ["negpostraits", "disgust", "danger", "impurity"]
 
 
-# FIRST AGGREGATE BOOTSTRAPS FROM EACH DIMENSION AND TIME PERIOD:
-    
-dim= 'negpostraits'
-dim2= 'negpostraits'
-
-diseases= pd.read_csv('temp' + str(dim) + '1980.csv')#had to save as csv in utf8
-diseases1= pd.read_csv('temp' + str(dim) +'1983.csv')#had to save as csv in utf8
-diseases= diseases.append(diseases1)
-diseases1= pd.read_csv('temp' + str(dim) + '1986.csv')#had to save as csv in utf8
-diseases= diseases.append(diseases1)
-diseases1= pd.read_csv('temp' + str(dim) + '1989.csv')#had to save as csv in utf8
-diseases= diseases.append(diseases1)
-diseases1= pd.read_csv('temp' + str(dim) + '1992.csv')#had to save as csv in utf8
-diseases= diseases.append(diseases1)
-diseases1= pd.read_csv('temp' + str(dim) + '1995.csv')#had to save as csv in utf8
-diseases= diseases.append(diseases1)
-diseases1= pd.read_csv('temp' + str(dim) + '1998.csv')#had to save as csv in utf8
-diseases= diseases.append(diseases1)
-diseases1= pd.read_csv('temp'+ str(dim) +'2001.csv')#had to save as csv in utf8
-diseases= diseases.append(diseases1)
-diseases1= pd.read_csv('temp'+ str(dim) +'2004.csv')#had to save as csv in utf8
-diseases= diseases.append(diseases1)
-diseases1= pd.read_csv('temp'+ str(dim) +'2007.csv')#had to save as csv in utf8
-diseases= diseases.append(diseases1)
-diseases1= pd.read_csv('temp'+ str(dim) +'2010.csv')#had to save as csv in utf8
-diseases= diseases.append(diseases1)
-diseases1= pd.read_csv('temp'+ str(dim) +'2013.csv')#had to save as csv in utf8
-diseases= diseases.append(diseases1)
-diseases1= pd.read_csv('temp'+ str(dim) +'2016.csv')#had to save as csv in utf8
-diseases= diseases.append(diseases1)
-
-negpostraits= diseases
-negpostraits['bootno'] = negpostraits['BootNumber'].str.split('_', expand=True)[3] #split on _ to get bootnumber itself
-
-# Next, disgust
-
-dim= 'disgust'
-dim2= 'disgust'
-
-diseases= pd.read_csv('temp' + str(dim) + '1980.csv')#had to save as csv in utf8
-diseases1= pd.read_csv('temp' + str(dim) +'1983.csv')#had to save as csv in utf8
-diseases= diseases.append(diseases1)
-diseases1= pd.read_csv('temp' + str(dim) + '1986.csv')#had to save as csv in utf8
-diseases= diseases.append(diseases1)
-diseases1= pd.read_csv('temp' + str(dim) + '1989.csv')#had to save as csv in utf8
-diseases= diseases.append(diseases1)
-diseases1= pd.read_csv('temp' + str(dim) + '1992.csv')#had to save as csv in utf8
-diseases= diseases.append(diseases1)
-diseases1= pd.read_csv('temp' + str(dim) + '1995.csv')#had to save as csv in utf8
-diseases= diseases.append(diseases1)
-diseases1= pd.read_csv('temp' + str(dim) + '1998.csv')#had to save as csv in utf8
-diseases= diseases.append(diseases1)
-diseases1= pd.read_csv('temp'+ str(dim) +'2001.csv')#had to save as csv in utf8
-diseases= diseases.append(diseases1)
-diseases1= pd.read_csv('temp'+ str(dim) +'2004.csv')#had to save as csv in utf8
-diseases= diseases.append(diseases1)
-diseases1= pd.read_csv('temp'+ str(dim) +'2007.csv')#had to save as csv in utf8
-diseases= diseases.append(diseases1)
-diseases1= pd.read_csv('temp'+ str(dim) +'2010.csv')#had to save as csv in utf8
-diseases= diseases.append(diseases1)
-diseases1= pd.read_csv('temp'+ str(dim) +'2013.csv')#had to save as csv in utf8
-diseases= diseases.append(diseases1)
-diseases1= pd.read_csv('temp'+ str(dim) +'2016.csv')#had to save as csv in utf8
-diseases= diseases.append(diseases1)
+def parse_arguments():
+    parser = argparse.ArgumentParser(description="Combine per-dimension bootstrap scores into a stigma index.")
+    add_path_arguments(parser, require_raw_data_root=False, require_modeling_dir=False)
+    parser.add_argument(
+        "--dimensions",
+        nargs="+",
+        default=DEFAULT_DIMENSIONS,
+        help="Dimensions to include when averaging the stigma index.",
+    )
+    parser.add_argument(
+        "--input-dir",
+        type=Path,
+        default=None,
+        help="Directory containing per-dimension temp CSVs (defaults to results dir).",
+    )
+    return parser.parse_args()
 
 
-disgust= diseases
-#disgust['partial_stigma_score'] = disgust['disgust']
+def load_dimension(input_dir: Path, dimension: str) -> pd.DataFrame:
+    frames = [pd.read_csv(input_dir / f"temp{dimension}{year}.csv") for year in YEARS]
+    df = pd.concat(frames, ignore_index=True)
+    df["bootno"] = df["BootNumber"].str.split("_", expand=True)[3]
+    return df[["Reconciled_Name", "PlottingGroup", "Year", "bootno", dimension]].rename(
+        columns={"PlottingGroup": f"PlottingGroup_{dimension}"}
+    )
 
 
-disgust['bootno'] = disgust['BootNumber'].str.split('_', expand=True)[3] #split on _ to get bootnumber itself
+def main():
+    args = parse_arguments()
+    paths = build_path_config(args)
+    input_dir = args.input_dir or paths.results_dir
+
+    dimension_frames = [load_dimension(input_dir, dim) for dim in args.dimensions]
+    merged = reduce(lambda left, right: left.merge(right, on=["Reconciled_Name", "Year", "bootno"]), dimension_frames)
+
+    plotting_cols = [col for col in merged.columns if col.startswith("PlottingGroup_")]
+    merged["PlottingGroup"] = merged[plotting_cols].bfill(axis=1).iloc[:, 0]
+    merged = merged.drop(columns=plotting_cols)
+
+    merged["stigma_index_mean"] = merged[args.dimensions].mean(axis=1)
+
+    summary = (
+        merged.groupby(["Reconciled_Name", "Year", "PlottingGroup"])["stigma_index_mean"]
+        .agg(
+            count="count",
+            mean="mean",
+            std="std",
+            min="min",
+            CI4=lambda s: s.quantile(0.04),
+            CI50=lambda s: s.quantile(0.5),
+            CI96=lambda s: s.quantile(0.96),
+            max="max",
+        )
+        .reset_index()
+    )
+    summary["Dimension"] = "stigmaindex"
+
+    output_path = paths.aggregated_results_path("stigmaindex_aggregated_temp_92CI.csv")
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    summary.to_csv(output_path, index=False)
 
 
-
-# Next, danger
-dim= 'danger'
-dim2= 'danger'
-
-diseases= pd.read_csv('temp' + str(dim) + '1980.csv')#had to save as csv in utf8
-diseases1= pd.read_csv('temp' + str(dim) +'1983.csv')#had to save as csv in utf8
-diseases= diseases.append(diseases1)
-diseases1= pd.read_csv('temp' + str(dim) + '1986.csv')#had to save as csv in utf8
-diseases= diseases.append(diseases1)
-diseases1= pd.read_csv('temp' + str(dim) + '1989.csv')#had to save as csv in utf8
-diseases= diseases.append(diseases1)
-diseases1= pd.read_csv('temp' + str(dim) + '1992.csv')#had to save as csv in utf8
-diseases= diseases.append(diseases1)
-diseases1= pd.read_csv('temp' + str(dim) + '1995.csv')#had to save as csv in utf8
-diseases= diseases.append(diseases1)
-diseases1= pd.read_csv('temp' + str(dim) + '1998.csv')#had to save as csv in utf8
-diseases= diseases.append(diseases1)
-diseases1= pd.read_csv('temp'+ str(dim) +'2001.csv')#had to save as csv in utf8
-diseases= diseases.append(diseases1)
-diseases1= pd.read_csv('temp'+ str(dim) +'2004.csv')#had to save as csv in utf8
-diseases= diseases.append(diseases1)
-diseases1= pd.read_csv('temp'+ str(dim) +'2007.csv')#had to save as csv in utf8
-diseases= diseases.append(diseases1)
-diseases1= pd.read_csv('temp'+ str(dim) +'2010.csv')#had to save as csv in utf8
-diseases= diseases.append(diseases1)
-diseases1= pd.read_csv('temp'+ str(dim) +'2013.csv')#had to save as csv in utf8
-diseases= diseases.append(diseases1)
-diseases1= pd.read_csv('temp'+ str(dim) +'2016.csv')#had to save as csv in utf8
-diseases= diseases.append(diseases1)
-
-
-danger= diseases
-
-
-danger['bootno'] = danger['BootNumber'].str.split('_', expand=True)[3] #split on _ to get bootnumber itself
-
-
-# Next, impurity
-
-dim= 'impurity'
-dim2= 'impurity'
-
-diseases= pd.read_csv('temp' + str(dim) + '1980.csv')#had to save as csv in utf8
-diseases1= pd.read_csv('temp' + str(dim) +'1983.csv')#had to save as csv in utf8
-diseases= diseases.append(diseases1)
-diseases1= pd.read_csv('temp' + str(dim) + '1986.csv')#had to save as csv in utf8
-diseases= diseases.append(diseases1)
-diseases1= pd.read_csv('temp' + str(dim) + '1989.csv')#had to save as csv in utf8
-diseases= diseases.append(diseases1)
-diseases1= pd.read_csv('temp' + str(dim) + '1992.csv')#had to save as csv in utf8
-diseases= diseases.append(diseases1)
-diseases1= pd.read_csv('temp' + str(dim) + '1995.csv')#had to save as csv in utf8
-diseases= diseases.append(diseases1)
-diseases1= pd.read_csv('temp' + str(dim) + '1998.csv')#had to save as csv in utf8
-diseases= diseases.append(diseases1)
-diseases1= pd.read_csv('temp'+ str(dim) +'2001.csv')#had to save as csv in utf8
-diseases= diseases.append(diseases1)
-diseases1= pd.read_csv('temp'+ str(dim) +'2004.csv')#had to save as csv in utf8
-diseases= diseases.append(diseases1)
-diseases1= pd.read_csv('temp'+ str(dim) +'2007.csv')#had to save as csv in utf8
-diseases= diseases.append(diseases1)
-diseases1= pd.read_csv('temp'+ str(dim) +'2010.csv')#had to save as csv in utf8
-diseases= diseases.append(diseases1)
-diseases1= pd.read_csv('temp'+ str(dim) +'2013.csv')#had to save as csv in utf8
-diseases= diseases.append(diseases1)
-diseases1= pd.read_csv('temp'+ str(dim) +'2016.csv')#had to save as csv in utf8
-diseases= diseases.append(diseases1)
-
-
-impurity= diseases
-
-impurity['bootno'] = impurity['BootNumber'].str.split('_', expand=True)[3] #split on _ to get bootnumber itself
-
-# SECOND, MERGE ALL THESE DIMENSIONS SCORES TOGETHER, AGGREGATE BOOTSTRAPPED SCORES, AND CLEAN UP
-
-mergeddat = disgust.merge(negpostraits, on= ["Reconciled_Name", "Year", 'bootno'])
-mergeddat = mergeddat.merge(danger, on= ["Reconciled_Name", "Year", 'bootno'])
-mergeddat = mergeddat.merge(impurity, on= ["Reconciled_Name", "Year", 'bootno'])
-
-mergeddat['stigma_index_mean']= mergeddat[['disgust', 'danger', 'impurity', 'negpostraits']].mean(axis=1)
-        
-
-cols = [0, 4, 5, 6, 7,8,9,10, 11,13,14, 15,16,17, 18]
-mergeddat.drop(mergeddat.columns[cols],axis=1,inplace=True)   #now just have 1 dataset with stimaindex
-
-
-grouped = mergeddat.groupby(['Reconciled_Name', 'Year']) #group by to describe with 92% CI in next line
-aggregated= grouped.describe(percentiles=[.04, .5, .96]) 
-aggregated = aggregated.reset_index()
-aggregated2= aggregated.merge(diseases, how= 'left', on=['Reconciled_Name', 'Year']) #merge back in  
-aggregated2 = aggregated2.drop_duplicates(subset=['Reconciled_Name', 'Year'])
-
-
-aggregated2 = aggregated2.drop(columns=aggregated2.columns[[2,3, 12, 14, 15, 16]])
-aggregated2.columns = ['Reconciled_Name', 'Year', "count",	"mean"	, "std"	 ,"min"	, "CI4%",	"CI50%"	,"CI96%"	,"max",	"PlottingGroup"]
-aggregated2['Dimension'] = 'stigmaindex'
-
-# THIRD, WRITE RESULTS TO CSV
-
-aggregated2.to_csv('C:/Users/arsen/Dropbox/R01DiseaseStigma/RESULTS/LexisNexis_News/stigmaindex_aggregated_temp_92CI.csv') 
-    
-
+if __name__ == "__main__":
+    main()
