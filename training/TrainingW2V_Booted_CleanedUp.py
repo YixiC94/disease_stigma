@@ -91,6 +91,11 @@ def main():
                 write_booted_txt(paths, current_start, boot, paths.bootstrap_corpus_path(current_start, current_interval), current_interval)
                 sentences = SentenceIterator(paths.bootstrap_corpus_path(current_start, current_interval))
                 corpus = list(PhrasingIterable(bigram_transformer, sentences))
+                print(f"[DEBUG] Corpus length for years {current_start}-{current_start + current_interval - 1}, boot {boot}: {len(corpus)}")
+                if corpus:
+                    print(f"[DEBUG] Sample sentence: {corpus[0]}")
+                else:
+                    print(f"[DEBUG] Corpus is empty for years {current_start}-{current_start + current_interval - 1}, boot {boot}")
                 time.sleep(args.sleep)
                 if not corpus:
                     print(f"Warning: Empty corpus for years {current_start}-{current_start + current_interval - 1}, boot {boot}. Skipping.")
@@ -103,6 +108,9 @@ def main():
                     min_count=args.min_count,
                 )
                 model1.build_vocab(corpus)
+                print(f"[DEBUG] Vocabulary size: {len(model1.wv)}")
+                if len(model1.wv) > 0:
+                    print(f"[DEBUG] Top 10 words: {model1.wv.index_to_key[:10]}")
                 if model1.corpus_count == 0 or len(model1.wv) == 0:
                     print(f"Warning: No vocabulary built for years {current_start}-{current_start + current_interval - 1}, boot {boot}. Skipping.")
                     continue
@@ -119,6 +127,11 @@ def main():
             write_booted_txt(paths, args.start_year, boot, paths.bootstrap_corpus_path(args.start_year, args.year_interval), args.year_interval)
             sentences = SentenceIterator(paths.bootstrap_corpus_path(args.start_year, args.year_interval))
             corpus = list(PhrasingIterable(bigram_transformer, sentences))
+            print(f"[DEBUG] Corpus length for years {args.start_year}-{args.start_year + args.year_interval - 1}, boot {boot}: {len(corpus)}")
+            if corpus:
+                print(f"[DEBUG] Sample sentence: {corpus[0]}")
+            else:
+                print(f"[DEBUG] Corpus is empty for years {args.start_year}-{args.start_year + args.year_interval - 1}, boot {boot}")
             time.sleep(args.sleep)
             if not corpus:
                 print(f"Warning: Empty corpus for years {args.start_year}-{args.start_year + args.year_interval - 1}, boot {boot}. Skipping.")
@@ -131,6 +144,9 @@ def main():
                 min_count=args.min_count,
             )
             model1.build_vocab(corpus)
+            print(f"[DEBUG] Vocabulary size: {len(model1.wv)}")
+            if len(model1.wv) > 0:
+                print(f"[DEBUG] Top 10 words: {model1.wv.index_to_key[:10]}")
             if model1.corpus_count == 0 or len(model1.wv) == 0:
                 print(f"Warning: No vocabulary built for years {args.start_year}-{args.start_year + args.year_interval - 1}, boot {boot}. Skipping.")
                 continue
