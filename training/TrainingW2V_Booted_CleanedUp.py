@@ -90,7 +90,7 @@ def main():
             for boot in range(args.boots):
                 write_booted_txt(paths, current_start, boot, paths.bootstrap_corpus_path(current_start, current_interval), current_interval)
                 sentences = SentenceIterator(paths.bootstrap_corpus_path(current_start, current_interval))
-                corpus = PhrasingIterable(bigram_transformer, sentences)
+                corpus = list(PhrasingIterable(bigram_transformer, sentences))
                 time.sleep(args.sleep)
                 model1 = Word2Vec(
                     workers=args.workers,
@@ -112,7 +112,7 @@ def main():
         for boot in range(args.boots):
             write_booted_txt(paths, args.start_year, boot, paths.bootstrap_corpus_path(args.start_year, args.year_interval), args.year_interval)
             sentences = SentenceIterator(paths.bootstrap_corpus_path(args.start_year, args.year_interval))
-            corpus = PhrasingIterable(bigram_transformer, sentences)
+            corpus = list(PhrasingIterable(bigram_transformer, sentences))
             time.sleep(args.sleep)
             model1 = Word2Vec(
                 workers=args.workers,
