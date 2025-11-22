@@ -38,23 +38,23 @@ An example aggregated output is provided at `outputs/results/stigmaindex_aggrega
 * `data_prep/build_lexicon_stigma.py`: Build stigma-related lexicons used across training, validation, and analysis steps.
 
 ### Training
-* `training/TrainingPhraser_CleanedUp.py`: Train phrasers on text data for configurable time windows. Supports two modes:
+* `training/training_phraser.py`: Train phrasers on text data for configurable time windows. Supports two modes:
   - Single window: Specify `--start-year` and `--year-interval` to train one phraser for that interval.
   - Batch mode: Add `--end-year` to automatically train phrasers for all intervals from `start-year` to `end-year` (inclusive), each of length `year-interval`.
-* `training/TrainingW2V_Booted_CleanedUp.py`: Train bootstrapped Word2Vec models for configurable time windows. Supports two modes:
+* `training/training_w2v_booted.py`: Train bootstrapped Word2Vec models for configurable time windows. Supports two modes:
   - Single window: Specify `--start-year` and `--year-interval` to train models for one interval.
   - Batch mode: Add `--end-year` to automatically train models for all intervals from `start-year` to `end-year` (inclusive), each of length `year-interval`. Each interval will use its corresponding phraser model.
 
 ### Validation
-* `validation/Validating_OverallW2VModels_CleanedUp.py`: Validate an overall Word2Vec model on the WordSim-353 test set and the Google analogy test (`reference_data/questions_words_pasted.txt`).
-* `validation/Validating_Dimensions_in_Bootstraps_CleanedUp.py`: Perform cross-validation for each of the four stigma dimensions, compute cosine similarities, and list the most/least similar words. Requires `data_prep/build_lexicon_stigma.py` and `analysis/dimension_stigma.py`.
+* `validation/validating_overall_w2v_models.py`: Validate an overall Word2Vec model on the WordSim-353 test set and the Google analogy test (`reference_data/questions_words_pasted.txt`).
+* `validation/validating_dimensions_in_bootstraps.py`: Perform cross-validation for each of the four stigma dimensions, compute cosine similarities, and list the most/least similar words. Requires `data_prep/build_lexicon_stigma.py` and `analysis/dimension_stigma.py`.
 
 ### Analysis and aggregation
-* `analysis/WriteStigmaScores_CleanedUp.py`: Compute four stigma scores plus a medicalization score for each disease across models/time windows and write CSVs. Depends on `data_prep/build_lexicon_stigma.py`, `analysis/dimension_stigma.py`, and inputs such as `reference_data/updated_personality_trait_list.csv`, `reference_data/Stigma_WordLists.csv`, and `reference_data/Disease_list_5.12.20_uncorrupted.csv`.
-* `analysis/AggregatingStigmaScores_StigmaIndex_CleanedUp.py`: Aggregate bootstrapped scores across time windows to produce mean and 92% confidence intervals for each disease’s stigma index (writes a consolidated CSV, e.g., `stigmaindex_aggregated_temp_92CI.csv`).
-* `analysis/AggregatingBootstraps_CleanedUp.py`: Aggregate bootstrapped scores per dimension and time window, emitting one CSV per dimension.
-* `analysis/WordCounts_CleanedUp.py`: Compute per-disease mention counts with confidence intervals. Requires `reference_data/Disease_list_5.12.20_uncorrupted.csv` and currently contains legacy hard-coded paths.
-* `analysis/PlottingBootstrapped_CleanedUp.py`: Visualize stigma scores of diseases by group and time (expects an aggregated CSV such as `stigmaindex_aggregated_temp_92CI.csv`).
+* `analysis/write_stigma_scores.py`: Compute four stigma scores plus a medicalization score for each disease across models/time windows and write CSVs. Depends on `data_prep/build_lexicon_stigma.py`, `analysis/dimension_stigma.py`, and inputs such as `reference_data/updated_personality_trait_list.csv`, `reference_data/Stigma_WordLists.csv`, and `reference_data/Disease_list_5.12.20_uncorrupted.csv`.
+* `analysis/aggregating_stigma_index.py`: Aggregate bootstrapped scores across time windows to produce mean and 92% confidence intervals for each disease’s stigma index (writes a consolidated CSV, e.g., `stigmaindex_aggregated_temp_92CI.csv`).
+* `analysis/aggregating_bootstraps.py`: Aggregate bootstrapped scores per dimension and time window, emitting one CSV per dimension.
+* `analysis/word_counts.py`: Compute per-disease mention counts with confidence intervals. Requires `reference_data/Disease_list_5.12.20_uncorrupted.csv` and currently contains legacy hard-coded paths.
+* `analysis/plotting_bootstrapped.py`: Visualize stigma scores of diseases by group and time (expects an aggregated CSV such as `stigmaindex_aggregated_temp_92CI.csv`).
 
 ## Dependencies
 
@@ -93,12 +93,12 @@ Install them with `pip install -r requirements.txt` (if available) or `pip insta
 2. **Train phrase model(s) for time windows**:
    - Single window:
      ```bash
-     python training/TrainingPhraser_CleanedUp.py \
+     python training/training_phraser.py \
        --start-year 1992 --year-interval 3 --raw-data-root data/preprocessed --modeling-dir-base outputs/models
      ```
    - Batch mode (multiple windows):
      ```bash
-     python training/TrainingPhraser_CleanedUp.py \
+     python training/training_phraser.py \
        --start-year 1980 --year-interval 3 --end-year 1991 --raw-data-root data/preprocessed --modeling-dir-base outputs/models
      ```
    This will train all intervals from 1980–1982, 1983–1985, … up to 1991.
@@ -106,14 +106,14 @@ Install them with `pip install -r requirements.txt` (if available) or `pip insta
 3. **Train bootstrapped Word2Vec models**:
    - Single window:
      ```bash
-     python training/TrainingW2V_Booted_CleanedUp.py \
+     python training/training_w2v_booted.py \
        --start-year 1992 --year-interval 3 --boots 25 \
        --min-count 50 --window 10 --vector-size 300 \
        --raw-data-root data/preprocessed --modeling-dir-base outputs/models
      ```
    - Batch mode (multiple windows):
      ```bash
-     python training/TrainingW2V_Booted_CleanedUp.py \
+     python training/training_w2v_booted.py \
        --start-year 1980 --year-interval 3 --end-year 1991 --boots 25 \
        --min-count 50 --window 10 --vector-size 300 \
        --raw-data-root data/preprocessed --modeling-dir-base outputs/models
@@ -123,13 +123,13 @@ Install them with `pip install -r requirements.txt` (if available) or `pip insta
    - For mock/testing runs you can lower `--min-count` (e.g., 1) and/or supply a different prefix to keep outputs distinct from official runs.
 
 4. **Validate models** (run after training to catch issues early):
-  * Overall analogies: `python validation/Validating_OverallW2VModels_CleanedUp.py --model-path outputs/models/<model>`
-  * Dimension quality: `python validation/Validating_Dimensions_in_Bootstraps_CleanedUp.py --modeling-dir-base outputs/models --year-interval 3 --model-prefix <prefix>`
+  * Overall analogies: `python validation/validating_overall_w2v_models.py --model-path outputs/models/<model>`
+  * Dimension quality: `python validation/validating_dimensions_in_bootstraps.py --modeling-dir-base outputs/models --year-interval 3 --model-prefix <prefix>`
     - You may omit `--model-prefix`; the script will read `training_manifest.json` to discover it.
 
 5. **Compute stigma scores per dimension**:
    ```bash
-   python analysis/WriteStigmaScores_CleanedUp.py \
+   python analysis/write_stigma_scores.py \
      --modeling-dir-base outputs/models --results-dir outputs/results \
      --start-year 1980 --year-interval 3 --end-year 2016 --boots 25 \
      --plotting-groups neurodevelopmental
@@ -139,12 +139,12 @@ Install them with `pip install -r requirements.txt` (if available) or `pip insta
 
 6. **Aggregate and plot**:
    ```bash
-   python analysis/AggregatingStigmaScores_StigmaIndex_CleanedUp.py \
+   python analysis/aggregating_stigma_index.py \
      --results-dir outputs/results \
      --start-year 1980 --end-year 2016 --year-interval 3 \
      --dimensions negpostraits disgust danger impurity
 
-   python analysis/PlottingBootstrapped_CleanedUp.py \
+   python analysis/plotting_bootstrapped.py \
      --dimension stigmaindex --results-dir outputs/results
    ```
    - Aggregation now accepts `--start-year/--end-year/--year-interval` to match what you trained, and skips missing temp files with a warning.
@@ -152,7 +152,7 @@ Install them with `pip install -r requirements.txt` (if available) or `pip insta
 
 ## Notes and outstanding manual adjustments
 
-* `analysis/WordCounts_CleanedUp.py` still contains legacy, hard-coded paths and should be updated before use.
+* `analysis/word_counts.py` still contains legacy, hard-coded paths and should be updated before use.
 * Validation and analysis scripts assume trained models and bootstrapped artifacts exist in `outputs/models`.
 * Raw LexisNexis corpora are not distributed; use your own data with the provided preprocessing script.
 
