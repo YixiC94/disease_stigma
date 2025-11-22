@@ -112,19 +112,16 @@ def main():
     if args.end_year is not None:
         # Batch mode: loop from start_year to end_year
         current_start = args.start_year
+        total_windows = ((args.end_year - args.start_year) // args.year_interval) + 1
+        window_idx = 1
         while current_start <= args.end_year:
             current_interval = min(args.year_interval, args.end_year - current_start + 1)
-            print(f"Training W2V for {current_start}-{current_start + current_interval - 1}")
+            print(f"[{window_idx}/{total_windows}] Training W2V for {current_start}-{current_start + current_interval - 1}")
             bigram_transformer = Phraser.load(str(paths.bigram_path(current_start, current_interval)))
             for boot in range(args.boots):
                 write_booted_txt(paths, current_start, boot, paths.bootstrap_corpus_path(current_start, current_interval), current_interval)
                 sentences = SentenceIterator(paths.bootstrap_corpus_path(current_start, current_interval))
                 corpus = list(PhrasingIterable(bigram_transformer, sentences))
-                print(f"[DEBUG] Corpus length for years {current_start}-{current_start + current_interval - 1}, boot {boot}: {len(corpus)}")
-                if corpus:
-                    print(f"[DEBUG] Sample sentence: {corpus[0]}")
-                else:
-                    print(f"[DEBUG] Corpus is empty for years {current_start}-{current_start + current_interval - 1}, boot {boot}")
                 time.sleep(args.sleep)
                 if not corpus:
                     print(f"Warning: Empty corpus for years {current_start}-{current_start + current_interval - 1}, boot {boot}. Skipping.")
@@ -140,9 +137,6 @@ def main():
                 if model1.corpus_count == 0 or len(model1.wv) == 0:
                     print(f"Warning: No vocabulary built for years {current_start}-{current_start + current_interval - 1}, boot {boot}. Skipping.")
                     continue
-                print(f"[DEBUG] Vocabulary size: {len(model1.wv)}")
-                if len(model1.wv) > 0:
-                    print(f"[DEBUG] Top 10 words: {model1.wv.index_to_key[:10]}")
                 model1.train(corpus, total_examples=model1.corpus_count, epochs=args.iterations)
                 model_path = paths.bootstrap_model_path(current_start, boot, model_prefix, current_interval)
                 model_path.parent.mkdir(parents=True, exist_ok=True)
@@ -156,6 +150,7 @@ def main():
                 args=args,
             )
             current_start += args.year_interval
+            window_idx += 1
     else:
         # Single interval mode
         bigram_transformer = Phraser.load(str(paths.bigram_path(args.start_year, args.year_interval)))
@@ -163,11 +158,6 @@ def main():
             write_booted_txt(paths, args.start_year, boot, paths.bootstrap_corpus_path(args.start_year, args.year_interval), args.year_interval)
             sentences = SentenceIterator(paths.bootstrap_corpus_path(args.start_year, args.year_interval))
             corpus = list(PhrasingIterable(bigram_transformer, sentences))
-            print(f"[DEBUG] Corpus length for years {args.start_year}-{args.start_year + args.year_interval - 1}, boot {boot}: {len(corpus)}")
-            if corpus:
-                print(f"[DEBUG] Sample sentence: {corpus[0]}")
-            else:
-                print(f"[DEBUG] Corpus is empty for years {args.start_year}-{args.start_year + args.year_interval - 1}, boot {boot}")
             time.sleep(args.sleep)
             if not corpus:
                 print(f"Warning: Empty corpus for years {args.start_year}-{args.start_year + args.year_interval - 1}, boot {boot}. Skipping.")
@@ -183,9 +173,6 @@ def main():
             if model1.corpus_count == 0 or len(model1.wv) == 0:
                 print(f"Warning: No vocabulary built for years {args.start_year}-{args.start_year + args.year_interval - 1}, boot {boot}. Skipping.")
                 continue
-            print(f"[DEBUG] Vocabulary size: {len(model1.wv)}")
-            if len(model1.wv) > 0:
-                print(f"[DEBUG] Top 10 words: {model1.wv.index_to_key[:10]}")
             model1.train(corpus, total_examples=model1.corpus_count, epochs=args.iterations)
             model_path = paths.bootstrap_model_path(args.start_year, boot, model_prefix, args.year_interval)
             model_path.parent.mkdir(parents=True, exist_ok=True)
