@@ -34,6 +34,12 @@ def parse_arguments():
         default=None,
         help="Directory for temporary per-dimension CSVs (defaults to --results-dir).",
     )
+    parser.add_argument(
+        "--lexicon-min-count",
+        type=int,
+        default=50,
+        help="Minimum token count for lexicon words to be included in dimension building (default: 50).",
+    )
     return parser.parse_args()
 
 
@@ -87,14 +93,22 @@ def load_diseases(paths):
     return diseases[["PlottingGroup", "Reconciled_Name"]].copy()
 
 
-def compute_dimension_scores(paths, years, dimension_name, positive_terms, negative_terms, model_prefix, output_dir: Path):
+def compute_dimension_scores(paths, years, dimension_name, positive_terms, negative_terms, model_prefix, output_dir: Path, lexicon_min_count: int):
     for yr1 in years:
         diseases = load_diseases(paths)
         for bootnum in DEFAULT_BOOT_RANGE:
             model_path = paths.bootstrap_model_path(yr1, bootnum, model_prefix)
             currentmodel1 = KeyedVectors.load(str(model_path))
             add_folded_terms(currentmodel1)
-            dimension_words = build_lexicon_stigma.dimension_lexicon(currentmodel1, positive_terms, negative_terms)
+            dimension_words = build_lexicon_stigma.dimension_lexicon(
+                currentmodel1, positive_terms, negative_terms, min_count=lexicon_min_count
+            )
+            if not dimension_words.pos_train or not dimension_words.neg_train:
+                print(
+                    f"Skipping {dimension_name} for {yr1} boot {bootnum}: "
+                    f"no lexicon terms in vocab (pos={len(dimension_words.pos_train)}, neg={len(dimension_words.neg_train)})."
+                )
+                continue
             dimension_obj = dimension_stigma.dimension(dimension_words, "larsen")
             kv = currentmodel1.wv if hasattr(currentmodel1, "wv") else currentmodel1
             allwordssims = dimension_obj.cos_sim(list(kv.key_to_index), returnNAs=False)
@@ -128,10 +142,10 @@ def main():
     purewords = lexicon.loc[(lexicon["WhichPole"] == "pure")]["Term"].str.lower().tolist()
     impurewords = lexicon.loc[(lexicon["WhichPole"] == "impure")]["Term"].str.lower().tolist()
 
-    compute_dimension_scores(paths, YEARS, "danger", dangerouswords, safewords, args.model_prefix, output_dir)
-    compute_dimension_scores(paths, YEARS, "disgust", disgustingwords, enticingwords, args.model_prefix, output_dir)
-    compute_dimension_scores(paths, YEARS, "immorality", immoralwords, moralwords, args.model_prefix, output_dir)
-    compute_dimension_scores(paths, YEARS, "impurity", impurewords, purewords, args.model_prefix, output_dir)
+    compute_dimension_scores(paths, YEARS, "danger", dangerouswords, safewords, args.model_prefix, output_dir, args.lexicon_min_count)
+    compute_dimension_scores(paths, YEARS, "disgust", disgustingwords, enticingwords, args.model_prefix, output_dir, args.lexicon_min_count)
+    compute_dimension_scores(paths, YEARS, "immorality", immoralwords, moralwords, args.model_prefix, output_dir, args.lexicon_min_count)
+    compute_dimension_scores(paths, YEARS, "impurity", impurewords, purewords, args.model_prefix, output_dir, args.lexicon_min_count)
 
 
 if __name__ == "__main__":
