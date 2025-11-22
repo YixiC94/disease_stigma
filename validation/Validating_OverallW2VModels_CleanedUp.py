@@ -25,7 +25,11 @@ def main():
     args = parse_arguments()
     model1 = Word2Vec.load(str(args.model_path))
 
-    model1.wv.evaluate_word_pairs(datapath("wordsim353.tsv"))
+    try:
+        model1.wv.evaluate_word_pairs(datapath("wordsim353.tsv"))
+    except ValueError as exc:
+        # Mock/small corpora may not contain WordSim words; keep going for analogies.
+        print(f"Skipping WordSim-353 evaluation due to error: {exc}")
     acc1, acc2 = model1.wv.evaluate_word_analogies(str(args.analogy_file))
     acc2_labels = [
         "capital-common-countries",
