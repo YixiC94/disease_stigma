@@ -82,6 +82,11 @@ def main():
         if grouped.empty:
             print(f"[WARN] No rows for plotting group {j} after count filter ({args.min_count}); skipping.")
             continue
+        # Handle datasets without CI columns (e.g., single boot). Fall back to mean for plotting.
+        has_ci = {"CI50%", "CI4%", "CI96%"}.issubset(grouped.columns)
+        center_col = "CI50%" if has_ci else "mean"
+        lower_col = "CI4%" if has_ci else "mean"
+        upper_col = "CI96%" if has_ci else "mean"
         fig, ax = plt.subplots(1)
         diseases = sorted(set(grouped["Reconciled_Name"].values))
         if not diseases:
@@ -91,15 +96,15 @@ def main():
         for i, disease in enumerate(diseases):
             ax.plot(
                 grouped[grouped["Reconciled_Name"] == disease]["Year"],
-                grouped[grouped["Reconciled_Name"] == disease]["CI50%"],
+                grouped[grouped["Reconciled_Name"] == disease][center_col],
                 lw=2,
                 label=str(disease),
                 color=mycolors[i % len(mycolors)],
             )
             ax.fill_between(
                 grouped[grouped["Reconciled_Name"] == disease]["Year"],
-                grouped[grouped["Reconciled_Name"] == disease]["CI4%"],
-                grouped[grouped["Reconciled_Name"] == disease]["CI96%"],
+                grouped[grouped["Reconciled_Name"] == disease][lower_col],
+                grouped[grouped["Reconciled_Name"] == disease][upper_col],
                 facecolor=mycolors[i % len(mycolors)],
                 alpha=0.5,
             )
