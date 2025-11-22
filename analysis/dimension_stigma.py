@@ -15,14 +15,20 @@ from sklearn.model_selection import KFold
 from sklearn.metrics.pairwise import cosine_similarity
 
 
+def _kv(model):
+    """Return the KeyedVectors view regardless of Word2Vec/KeyedVectors input."""
+    return model.wv if hasattr(model, "wv") else model
+
+
 def calc_wordlist_mean(wordlist, w2vmodel):
-    wordlist= [w2vmodel.wv[i] for i in wordlist]
+    kv = _kv(w2vmodel)
+    wordlist= [kv[i] for i in wordlist]
     meanvec = np.mean(wordlist,0) 
     meanvec= preprocessing.normalize(meanvec.reshape(1,-1), norm='l2') #ensure normalized to len 1
-    meanvec= meanvec.reshape(w2vmodel.vector_size,)  #now will work with gensim similarity fcns
+    meanvec= meanvec.reshape(kv.vector_size,)  #now will work with gensim similarity fcns
     return(meanvec)
    
-    
+   
 class dimension: 
     def __init__(self, semantic_direction, method):
         self.semantic_direction= semantic_direction #this is another class, made with code in build_lexicon.py
@@ -34,7 +40,7 @@ class dimension:
     def calc_dim_larsen(self): #VERIFY THIS WORKS
         diffvec= calc_wordlist_mean(self.semantic_direction.pos_train, self.w2vmodel) - calc_wordlist_mean(self.semantic_direction.neg_train, self.w2vmodel)
         diffvec= preprocessing.normalize(diffvec.reshape(1,-1), norm='l2')
-        diffvec= diffvec.reshape(self.w2vmodel.vector_size,) #now will work with gensim similarity fcns
+        diffvec= diffvec.reshape(_kv(self.w2vmodel).vector_size,) #now will work with gensim similarity fcns
         return(diffvec)
         #return cossims between the found vector and some new word(s), and choose returnNAs if you still want to return words even if NAs 
     
@@ -48,12 +54,13 @@ class dimension:
         assert type(inputwords)==list, "Enter word(s) as a list, e.g., ['word']"
         interesting_dim=self.dimensionvec().reshape(1,-1) 
         cossims= []
+        kv = _kv(self.w2vmodel)
         for i in np.array(inputwords):
             if i=='nan' and returnNAs==True:
                 cossims.append(np.nan)
             elif i!='nan':
                 try:
-                    cossims.append(cosine_similarity(self.w2vmodel.wv[i].reshape(1,-1),interesting_dim)[0][0])
+                    cossims.append(cosine_similarity(kv[i].reshape(1,-1),interesting_dim)[0][0])
                 except KeyError:
                     if returnNAs==True:
                         cossims.append(np.nan)

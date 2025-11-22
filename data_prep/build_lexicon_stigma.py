@@ -13,22 +13,28 @@ from itertools import combinations
 from random import seed, sample
 
 
+def _kv(model):
+    """Return the KeyedVectors view regardless of Word2Vec/KeyedVectors input."""
+    return model.wv if hasattr(model, "wv") else model
+
+
 #this function cleans up a word list (or single word), so that only words in the w2v model are included
 def clean_words(word_list, w2vmodel, returnNA, min_count=1): #by default, doesn't return words not in the vocab
     assert type(word_list)== list, "Enter words as a list"
     cleaned_list= []
+    kv = _kv(w2vmodel)
     for i in word_list:
         if returnNA==False:
             try:
-                w2vmodel.wv[i]
-                if w2vmodel.wv.vocab[i].count >= min_count: #skip this word if it is not in the model at least min count times
+                kv[i]
+                if kv.get_vecattr(i, "count") >= min_count: #skip this word if it is not in the model at least min count times
                     cleaned_list.append(i)
             except KeyError: #skip this word if it is not in the model
                 continue
         elif returnNA==True:
             try:
-                w2vmodel.wv[i]
-                if w2vmodel.wv.vocab[i].count >= min_count:
+                kv[i]
+                if kv.get_vecattr(i, "count") >= min_count:
                     cleaned_list.append(i)
                 else:
                     cleaned_list.append(np.nan)

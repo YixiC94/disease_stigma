@@ -38,26 +38,36 @@ def parse_arguments():
 
 
 def fold_word(target, second, wvmodel):
-    weight_target = wvmodel.wv.vocab[target].count / (wvmodel.wv.vocab[target].count + wvmodel.wv.vocab[second].count)
-    weight_second = wvmodel.wv.vocab[second].count / (wvmodel.wv.vocab[target].count + wvmodel.wv.vocab[second].count)
-    weighted_wv = (weight_target * normalize(wvmodel.wv[target].reshape(1, -1))) + (
-        weight_second * normalize(wvmodel.wv[second].reshape(1, -1))
+    kv = wvmodel.wv if hasattr(wvmodel, "wv") else wvmodel
+    count_target = kv.get_vecattr(target, "count")
+    count_second = kv.get_vecattr(second, "count")
+    total = count_target + count_second
+    weight_target = count_target / total
+    weight_second = count_second / total
+    weighted_wv = (weight_target * normalize(kv[target].reshape(1, -1))) + (
+        weight_second * normalize(kv[second].reshape(1, -1))
     )
     return normalize(weighted_wv)
 
 
 def add_folded_terms(model):
-    epilepsy_folded = fold_word("epilepsy", "epileptic", model)
-    drug_addiction_folded = fold_word("drug_addiction", "drug_addict", model)
-    obesity_folded = fold_word("obesity", "obese", model)
+    kv = model.wv if hasattr(model, "wv") else model
 
-    model.wv.add("epilepsy_folded", epilepsy_folded)
-    model.wv["drug_addiction_folded"] = drug_addiction_folded
-    model.wv["obesity_folded"] = obesity_folded
+    epilepsy_folded = fold_word("epilepsy", "epileptic", kv)
+    drug_addiction_folded = fold_word("drug_addiction", "drug_addict", kv)
+    obesity_folded = fold_word("obesity", "obese", kv)
 
-    model.wv.vocab["epilepsy_folded"].count = model.wv.vocab["epileptic"].count + model.wv.vocab["epilepsy"].count
-    model.wv.vocab["drug_addiction_folded"].count = model.wv.vocab["drug_addict"].count + model.wv.vocab["drug_addiction"].count
-    model.wv.vocab["obesity_folded"].count = model.wv.vocab["obese"].count + model.wv.vocab["obesity"].count
+    kv.add_vectors(["epilepsy_folded"], [epilepsy_folded.ravel()])
+    kv.add_vectors(["drug_addiction_folded"], [drug_addiction_folded.ravel()])
+    kv.add_vectors(["obesity_folded"], [obesity_folded.ravel()])
+
+    kv.set_vecattr("epilepsy_folded", "count", kv.get_vecattr("epileptic", "count") + kv.get_vecattr("epilepsy", "count"))
+    kv.set_vecattr(
+        "drug_addiction_folded",
+        "count",
+        kv.get_vecattr("drug_addict", "count") + kv.get_vecattr("drug_addiction", "count"),
+    )
+    kv.set_vecattr("obesity_folded", "count", kv.get_vecattr("obese", "count") + kv.get_vecattr("obesity", "count"))
 
     return model
 
@@ -88,7 +98,8 @@ def compute_dimension_scores(paths, years, dimension_name, positive_terms, negat
             add_folded_terms(currentmodel1)
             dimension_words = build_lexicon_stigma.dimension_lexicon(currentmodel1, positive_terms, negative_terms)
             dimension_obj = dimension_stigma.dimension(dimension_words, "larsen")
-            allwordssims = dimension_obj.cos_sim(list(currentmodel1.wv.vocab), returnNAs=False)
+            kv = currentmodel1.wv if hasattr(currentmodel1, "wv") else currentmodel1
+            allwordssims = dimension_obj.cos_sim(list(kv.key_to_index), returnNAs=False)
             diseases[f"{dimension_name}_score_stdized_{bootnum}"] = diseases["Reconciled_Name"].apply(
                 lambda x: (dimension_obj.cos_sim([str(x).lower()], returnNAs=True)[0] - np.mean(allwordssims))
                 / np.std(allwordssims)
