@@ -83,10 +83,12 @@ def main():
             print(f"[WARN] No rows for plotting group {j} after count filter ({args.min_count}); skipping.")
             continue
         # Handle datasets without CI columns (e.g., single boot). Fall back to mean for plotting.
-        has_ci = {"CI50%", "CI4%", "CI96%"}.issubset(grouped.columns)
-        center_col = "CI50%" if has_ci else "mean"
-        lower_col = "CI4%" if has_ci else "mean"
-        upper_col = "CI96%" if has_ci else "mean"
+        if {"CI50%", "CI4%", "CI96%"}.issubset(grouped.columns):
+            center_col, lower_col, upper_col = "CI50%", "CI4%", "CI96%"
+        elif {"CI50", "CI4", "CI96"}.issubset(grouped.columns):
+            center_col, lower_col, upper_col = "CI50", "CI4", "CI96"
+        else:
+            center_col = lower_col = upper_col = "mean"
         fig, ax = plt.subplots(1)
         diseases = sorted(set(grouped["Reconciled_Name"].values))
         if not diseases:
