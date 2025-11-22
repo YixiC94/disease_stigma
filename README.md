@@ -139,11 +139,15 @@ Install them with `pip install -r requirements.txt` (if available) or `pip insta
 6. **Aggregate and plot**:
    ```bash
    python analysis/AggregatingStigmaScores_StigmaIndex_CleanedUp.py \
-     --modeling-dir-base outputs/models --results-dir outputs/results
+     --results-dir outputs/results \
+     --start-year 1980 --end-year 2016 --year-interval 3 \
+     --dimensions negpostraits disgust danger impurity
 
    python analysis/PlottingBootstrapped_CleanedUp.py \
      --dimension stigmaindex --results-dir outputs/results
    ```
+   - Aggregation now accepts `--start-year/--end-year/--year-interval` to match what you trained, and skips missing temp files with a warning.
+   - For mock runs, limit the years and boots you actually produced (e.g., `--start-year 1980 --end-year 1980 --boots 1`) to avoid missing-file noise.
 
 ## Notes and outstanding manual adjustments
 

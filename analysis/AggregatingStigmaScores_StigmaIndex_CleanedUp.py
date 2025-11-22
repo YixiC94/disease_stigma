@@ -29,11 +29,35 @@ def parse_arguments():
         default=None,
         help="Directory containing per-dimension temp CSVs (defaults to results dir).",
     )
+    parser.add_argument("--start-year", type=int, default=YEARS[0], help="Start year (default: first in preset list).")
+    parser.add_argument(
+        "--end-year",
+        type=int,
+        default=None,
+        help="Optional end year. If set, will include windows from start-year to end-year stepping by year-interval.",
+    )
+    parser.add_argument(
+        "--year-interval", type=int, default=3, help="Number of years per window (default: 3, e.g., 1980-1982)."
+    )
     return parser.parse_args()
 
 
-def load_dimension(input_dir: Path, dimension: str) -> pd.DataFrame:
-    frames = [pd.read_csv(input_dir / f"temp{dimension}{year}.csv") for year in YEARS]
+def build_years(args) -> list[int]:
+    if args.end_year is not None:
+        return list(range(args.start_year, args.end_year + 1, args.year_interval))
+    return [args.start_year]
+
+
+def load_dimension(input_dir: Path, dimension: str, years: list[int]) -> pd.DataFrame:
+    frames = []
+    for year in years:
+        path = input_dir / f"temp{dimension}{year}.csv"
+        if not path.exists():
+            print(f"[WARN] Missing {path}, skipping.")
+            continue
+        frames.append(pd.read_csv(path))
+    if not frames:
+        raise FileNotFoundError(f"No files found for dimension '{dimension}' in {input_dir} for years {years}.")
     df = pd.concat(frames, ignore_index=True)
     df["bootno"] = df["BootNumber"].str.split("_", expand=True)[3]
     return df[["Reconciled_Name", "PlottingGroup", "Year", "bootno", dimension]].rename(
@@ -46,7 +70,8 @@ def main():
     paths = build_path_config(args)
     input_dir = args.input_dir or paths.results_dir
 
-    dimension_frames = [load_dimension(input_dir, dim) for dim in args.dimensions]
+    years = build_years(args)
+    dimension_frames = [load_dimension(input_dir, dim, years) for dim in args.dimensions]
     merged = reduce(lambda left, right: left.merge(right, on=["Reconciled_Name", "Year", "bootno"]), dimension_frames)
 
     plotting_cols = [col for col in merged.columns if col.startswith("PlottingGroup_")]
