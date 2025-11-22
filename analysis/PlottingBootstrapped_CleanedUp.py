@@ -112,7 +112,9 @@ def main():
         ax.set_title(f"{args.dimension} of diseases in plotting group: {j}")
         ax.legend(bbox_to_anchor=(1.05, 1.0), loc="upper left", ncol=1)
         output_dir.mkdir(parents=True, exist_ok=True)
-        plt.savefig(output_dir / f"{j}_{args.dimension}_Diseases_92CI_median.jpg", bbox_inches="tight")
+        outfile = output_dir / f"{j}_{args.dimension}_Diseases_92CI_median.jpg"
+        plt.savefig(outfile, bbox_inches="tight")
+        print(f"[INFO] Saved plot: {outfile}")
         plt.close(fig)
 
 
