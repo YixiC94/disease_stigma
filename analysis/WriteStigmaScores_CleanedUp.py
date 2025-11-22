@@ -16,6 +16,8 @@ from config.path_config import add_path_arguments, build_path_config
 
 
 DEFAULT_BOOTS = 25
+_PREFIX_LOG_CACHE: set[tuple[int, int, str]] = set()
+_FOLDED_WARN_CACHE: set[str] = set()
 
 
 def parse_arguments():
@@ -85,7 +87,9 @@ def add_folded_terms(model):
     ]:
         folded = fold_word(target, second, kv)
         if folded is None:
-            print(f"Skipping folded term {new_name}: missing '{target}' or '{second}' in vocab.")
+            if new_name not in _FOLDED_WARN_CACHE:
+                print(f"Skipping folded term {new_name}: missing '{target}' or '{second}' in vocab.")
+                _FOLDED_WARN_CACHE.add(new_name)
             continue
 
         kv.add_vectors([new_name], [folded.ravel()])
@@ -123,7 +127,10 @@ def resolve_model_prefix(paths, year: int, year_interval: int, provided_prefix: 
         data = json.loads(manifest_path.read_text())
         prefix = data.get("model_prefix")
         if prefix:
-            print(f"[INFO] Using model_prefix from manifest: {prefix} (year {year}-{end_year})")
+            key = (year, end_year, prefix)
+            if key not in _PREFIX_LOG_CACHE:
+                print(f"[INFO] Using model_prefix from manifest: {prefix} (year {year}-{end_year})")
+                _PREFIX_LOG_CACHE.add(key)
             return prefix
     raise ValueError(
         f"model-prefix not provided and manifest not found/invalid at {manifest_path}. "
@@ -178,7 +185,9 @@ def compute_dimension_scores(
             print(f"No scores produced for {dimension_name} {yr1}; skipping write.")
             continue
         output_dir.mkdir(parents=True, exist_ok=True)
-        melted.to_csv(output_dir / f"temp{dimension_name}{yr1}.csv")
+        output_path = output_dir / f"temp{dimension_name}{yr1}.csv"
+        print(f"[INFO] Writing {len(melted)} rows for {dimension_name} {yr1} to {output_path}")
+        melted.to_csv(output_path)
 
 
 def main():
