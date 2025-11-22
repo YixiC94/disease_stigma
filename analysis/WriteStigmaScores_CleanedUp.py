@@ -159,6 +159,9 @@ def compute_dimension_scores(
     boot_range,
     year_interval: int,
 ):
+    print(f"[INFO] Starting dimension '{dimension_name}'")
+    missing_models = 0
+    no_lexicon = 0
     for yr1 in years:
         diseases = load_diseases(paths)
         score_columns = []
@@ -166,7 +169,7 @@ def compute_dimension_scores(
         for bootnum in boot_range:
             model_path = paths.bootstrap_model_path(yr1, bootnum, resolved_prefix)
             if not model_path.exists():
-                print(f"Skipping {dimension_name} for {yr1} boot {bootnum}: model file not found at {model_path}.")
+                missing_models += 1
                 continue
             currentmodel1 = KeyedVectors.load(str(model_path))
             add_folded_terms(currentmodel1)
@@ -174,10 +177,7 @@ def compute_dimension_scores(
                 currentmodel1, positive_terms, negative_terms, min_count=lexicon_min_count
             )
             if not dimension_words.pos_train or not dimension_words.neg_train:
-                print(
-                    f"Skipping {dimension_name} for {yr1} boot {bootnum}: "
-                    f"no lexicon terms in vocab (pos={len(dimension_words.pos_train)}, neg={len(dimension_words.neg_train)})."
-                )
+                no_lexicon += 1
                 continue
             dimension_obj = dimension_stigma.dimension(dimension_words, "larsen")
             kv = currentmodel1.wv if hasattr(currentmodel1, "wv") else currentmodel1
@@ -191,12 +191,18 @@ def compute_dimension_scores(
         diseases["Year"] = [str(yr1)] * len(diseases)
         melted = melt_dimension_scores(diseases, dimension_name, score_columns)
         if melted.empty:
-            print(f"No scores produced for {dimension_name} {yr1}; skipping write.")
+            # Still useful to know, but keep it short.
+            print(f"[WARN] No scores for {dimension_name} {yr1} (boot columns empty).")
             continue
         output_dir.mkdir(parents=True, exist_ok=True)
         output_path = output_dir / f"temp{dimension_name}{yr1}.csv"
         print(f"[INFO] Writing {len(melted)} rows for {dimension_name} {yr1} to {output_path}")
         melted.to_csv(output_path)
+    if missing_models:
+        print(f"[WARN] {dimension_name}: skipped {missing_models} boots due to missing models.")
+    if no_lexicon:
+        print(f"[WARN] {dimension_name}: skipped {no_lexicon} boots with empty lexicon overlap.")
+    print(f"[INFO] Finished dimension '{dimension_name}'")
 
 
 def main():
