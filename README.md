@@ -34,7 +34,7 @@ An example aggregated output is provided at `outputs/results/stigmaindex_aggrega
 ## Script overview
 
 ### Data preparation
-* `data_prep/prepare_corpus_from_csv.py`: Convert news article CSVs into yearly pickle files (`NData_<year>/all<year>bodytexts_regexeddisamb_listofarticles`) expected by the training scripts.
+* `data_prep/prepare_corpus.py`: Convert news article CSV/Parquet into yearly pickle files (`NData_<year>/all<year>bodytexts_regexeddisamb_listofarticles`) expected by the training scripts.
 * `data_prep/build_lexicon_stigma.py`: Build stigma-related lexicons used across training, validation, and analysis steps.
 
 ### Training
@@ -82,13 +82,14 @@ Install them with `pip install -r requirements.txt` (if available) or `pip insta
 
 ## Typical workflow
 
-1. **Prepare corpus pickles** (from CSV input):
+1. **Prepare corpus pickles** (from CSV or Parquet input):
    ```bash
-   python data_prep/prepare_corpus_from_csv.py \
-     --csv-path /path/to/articles.csv \
+   python data_prep/prepare_corpus.py \
+     --input-path /path/to/articles.csv \  # or .parquet
      --text-column Text --title-column title --date-column Date \
      --default-year 2010 --output-root data/preprocessed --write-manifest
    ```
+   - The script auto-detects format by extension; override with `--input-format csv|parquet` if needed.
 
 2. **Train phrase model(s) for time windows**:
    - Single window:

@@ -1,5 +1,5 @@
 """
-Convert a CSV corpus into the pickle format expected by the disease stigma
+Convert a CSV/Parquet corpus into the pickle format expected by the disease stigma
 training pipeline.
 
 Each output file is a pickle containing a list of article strings. Sentences
@@ -16,7 +16,7 @@ from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterable, Any
-import csv
+import pandas as pd
 
 
 SENT_BOUNDARY = " SENTENCEBOUNDARYHERE "
@@ -68,13 +68,21 @@ def build_article_text(title: str, body: str) -> str:
     return SENT_BOUNDARY.join(sentences)
 
 
-def iter_rows(csv_path: Path, *, encoding: str) -> Iterable[dict[str, str]]:
-    with csv_path.open(newline="", encoding=encoding) as f:
-        reader = csv.DictReader(f)
-        if reader.fieldnames is None:
-            raise ValueError("CSV appears to have no header row.")
-        for row in reader:
-            yield row
+def iter_rows(input_path: Path, *, input_format: str, encoding: str) -> Iterable[dict[str, str]]:
+    fmt = input_format.lower()
+    if fmt == "auto":
+        suffix = input_path.suffix.lower()
+        fmt = "parquet" if suffix in [".parquet", ".pq"] else "csv"
+
+    if fmt == "parquet":
+        df = pd.read_parquet(input_path)
+    elif fmt == "csv":
+        df = pd.read_csv(input_path, encoding=encoding)
+    else:
+        raise ValueError(f"Unsupported input format: {input_format}")
+
+    for record in df.to_dict(orient="records"):
+        yield record
 
 
 def write_pickles(
@@ -128,8 +136,14 @@ def write_pickles(
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Convert a CSV news corpus into pipeline-ready pickles.")
-    parser.add_argument("--csv-path", type=Path, required=True, help="Path to the input CSV corpus.")
+    parser = argparse.ArgumentParser(description="Convert a CSV/Parquet news corpus into pipeline-ready pickles.")
+    parser.add_argument("--input-path", type=Path, required=True, help="Path to the input CSV or Parquet corpus.")
+    parser.add_argument(
+        "--input-format",
+        choices=["auto", "csv", "parquet"],
+        default="auto",
+        help="Input format (auto-detect by default).",
+    )
     parser.add_argument("--text-column", default="Text", help="Column containing the article body text.")
     parser.add_argument("--title-column", default="title", help="Optional column containing the article title.")
     parser.add_argument(
@@ -188,7 +202,7 @@ def main() -> None:
     seen_ids: set[str] = set()
     skipped_empty = 0
     skipped_short = 0
-    for row in iter_rows(args.csv_path, encoding=args.encoding):
+    for row in iter_rows(args.input_path, input_format=args.input_format, encoding=args.encoding):
         if args.id_column:
             row_id = clean_text(row.get(args.id_column))
             if row_id and row_id in seen_ids:
@@ -213,7 +227,7 @@ def main() -> None:
         args.output_root,
         basename_template=args.output_basename,
         write_manifest=args.write_manifest,
-        source_csv=args.csv_path,
+        source_csv=args.input_path,
         args=args,
     )
 
