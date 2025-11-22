@@ -101,32 +101,40 @@ Install them with `pip install -r requirements.txt` (if available) or `pip insta
      python training/TrainingPhraser_CleanedUp.py \
        --start-year 1980 --year-interval 3 --end-year 1991 --raw-data-root data/preprocessed --modeling-dir-base outputs/models
      ```
-   這會自動從 1980~1982、1983~1985... 一直到 1991，依序訓練所有分組。
+   This will train all intervals from 1980–1982, 1983–1985, … up to 1991.
 
 3. **Train bootstrapped Word2Vec models**:
-   - 單組模式：
+   - Single window:
      ```bash
-     python training/TrainingW2V_Booted_CleanUp.py \
-       --start-year 1992 --year-interval 3 --boots 25 --model-prefix CBOW_300d__win10_min50_iter3 \
+     python training/TrainingW2V_Booted_CleanedUp.py \
+       --start-year 1992 --year-interval 3 --boots 25 \
+       --min-count 50 --window 10 --vector-size 300 \
        --raw-data-root data/preprocessed --modeling-dir-base outputs/models
      ```
-   - 批次模式（多組）：
+   - Batch mode (multiple windows):
      ```bash
-     python training/TrainingW2V_Booted_CleanUp.py \
-       --start-year 1980 --year-interval 3 --end-year 1991 --boots 25 --model-prefix CBOW_300d__win10_min50_iter3 \
+     python training/TrainingW2V_Booted_CleanedUp.py \
+       --start-year 1980 --year-interval 3 --end-year 1991 --boots 25 \
+       --min-count 50 --window 10 --vector-size 300 \
        --raw-data-root data/preprocessed --modeling-dir-base outputs/models
      ```
-   這會自動從 1980~1982、1983~1985... 一直到 1991，依序訓練所有分組。
+   This will train all intervals from 1980–1982, 1983–1985, … up to 1991.
+   - `--model-prefix` is optional; when omitted, a name is auto-generated (e.g., `CBOW_300d__win10_min50_iter3`) and stored in `BootstrappedModels/<years>/training_manifest.json` along with training parameters.
+   - For mock/testing runs you can lower `--min-count` (e.g., 1) and/or supply a different prefix to keep outputs distinct from official runs.
 
 4. **Validate models** (run after training to catch issues early):
   * Overall analogies: `python validation/Validating_OverallW2VModels_CleanedUp.py --model-path outputs/models/<model>`
-  * Dimension quality: `python validation/Validating_Dimensions_in_Bootstraps_CleanedUp.py --modeling-dir-base outputs/models`
+  * Dimension quality: `python validation/Validating_Dimensions_in_Bootstraps_CleanedUp.py --modeling-dir-base outputs/models --year-interval 3 --model-prefix <prefix>`
+    - You may omit `--model-prefix`; the script will read `training_manifest.json` to discover it.
 
 5. **Compute stigma scores per dimension**:
    ```bash
    python analysis/WriteStigmaScores_CleanedUp.py \
-     --modeling-dir-base outputs/models --results-dir outputs/results
+     --modeling-dir-base outputs/models --results-dir outputs/results \
+     --start-year 1980 --year-interval 3 --end-year 2016 --boots 25
    ```
+   - You may omit `--model-prefix`; the script will read `training_manifest.json` for each interval.
+   - For mock data you can use fewer `--boots` and a lower `--lexicon-min-count`.
 
 6. **Aggregate and plot**:
    ```bash

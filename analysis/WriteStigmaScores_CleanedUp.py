@@ -24,8 +24,11 @@ def parse_arguments():
     parser.add_argument(
         "--model-prefix",
         type=str,
-        default="CBOW_300d__win10_min50_iter3",
-        help="Prefix used when loading bootstrapped Word2Vec/KeyedVector models.",
+        default=None,
+        help=(
+            "Prefix used when loading bootstrapped Word2Vec/KeyedVector models. "
+            "If omitted, will attempt to read training_manifest.json under BootstrappedModels/<years>/."
+        ),
     )
     parser.add_argument(
         "--output-dir",
@@ -109,6 +112,25 @@ def load_diseases(paths):
     return diseases[["PlottingGroup", "Reconciled_Name"]].copy()
 
 
+def resolve_model_prefix(paths, year: int, year_interval: int, provided_prefix: str | None) -> str:
+    if provided_prefix:
+        return provided_prefix
+    end_year = year + year_interval - 1
+    manifest_path = paths.modeling_dir_base / "BootstrappedModels" / f"{year}_{end_year}" / "training_manifest.json"
+    if manifest_path.exists():
+        import json
+
+        data = json.loads(manifest_path.read_text())
+        prefix = data.get("model_prefix")
+        if prefix:
+            print(f"[INFO] Using model_prefix from manifest: {prefix} (year {year}-{end_year})")
+            return prefix
+    raise ValueError(
+        f"model-prefix not provided and manifest not found/invalid at {manifest_path}. "
+        "Please pass --model-prefix explicitly."
+    )
+
+
 def compute_dimension_scores(
     paths,
     years,
@@ -119,12 +141,14 @@ def compute_dimension_scores(
     output_dir: Path,
     lexicon_min_count: int,
     boot_range,
+    year_interval: int,
 ):
     for yr1 in years:
         diseases = load_diseases(paths)
         score_columns = []
+        resolved_prefix = resolve_model_prefix(paths, yr1, year_interval, model_prefix)
         for bootnum in boot_range:
-            model_path = paths.bootstrap_model_path(yr1, bootnum, model_prefix)
+            model_path = paths.bootstrap_model_path(yr1, bootnum, resolved_prefix)
             if not model_path.exists():
                 print(f"Skipping {dimension_name} for {yr1} boot {bootnum}: model file not found at {model_path}.")
                 continue
@@ -183,7 +207,16 @@ def main():
     impurewords = lexicon.loc[(lexicon["WhichPole"] == "impure")]["Term"].str.lower().tolist()
 
     compute_dimension_scores(
-        paths, years, "danger", dangerouswords, safewords, args.model_prefix, output_dir, args.lexicon_min_count, boot_range
+        paths,
+        years,
+        "danger",
+        dangerouswords,
+        safewords,
+        args.model_prefix,
+        output_dir,
+        args.lexicon_min_count,
+        boot_range,
+        args.year_interval,
     )
     compute_dimension_scores(
         paths,
@@ -195,12 +228,31 @@ def main():
         output_dir,
         args.lexicon_min_count,
         boot_range,
+        args.year_interval,
     )
     compute_dimension_scores(
-        paths, years, "immorality", immoralwords, moralwords, args.model_prefix, output_dir, args.lexicon_min_count, boot_range
+        paths,
+        years,
+        "immorality",
+        immoralwords,
+        moralwords,
+        args.model_prefix,
+        output_dir,
+        args.lexicon_min_count,
+        boot_range,
+        args.year_interval,
     )
     compute_dimension_scores(
-        paths, years, "impurity", impurewords, purewords, args.model_prefix, output_dir, args.lexicon_min_count, boot_range
+        paths,
+        years,
+        "impurity",
+        impurewords,
+        purewords,
+        args.model_prefix,
+        output_dir,
+        args.lexicon_min_count,
+        boot_range,
+        args.year_interval,
     )
 
 

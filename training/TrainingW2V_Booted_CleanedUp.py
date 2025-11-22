@@ -4,6 +4,7 @@ Train bootstrapped Word2Vec models for a configurable year window (default 3 yea
 """
 
 import argparse
+import json
 import time
 import pickle
 from random import seed, choices
@@ -64,8 +65,11 @@ def parse_arguments():
     parser.add_argument(
         "--model-prefix",
         type=str,
-        default="CBOW_300d__win10_min50_iter3",
-        help="Prefix used when saving bootstrapped Word2Vec models.",
+        default=None,
+        help=(
+            "Prefix used when saving bootstrapped Word2Vec models. "
+            "If omitted, a prefix will be auto-generated from vector_size/window/min_count/iterations."
+        ),
     )
     parser.add_argument("--window", type=int, default=10)
     parser.add_argument("--min-count", type=int, default=50)
@@ -76,9 +80,34 @@ def parse_arguments():
     return parser.parse_args()
 
 
+def build_model_prefix(args: argparse.Namespace) -> str:
+    if args.model_prefix:
+        return args.model_prefix
+    return f"CBOW_{args.vector_size}d__win{args.window}_min{args.min_count}_iter{args.iterations}"
+
+
+def write_manifest(manifest_path: Path, *, start_year: int, interval: int, boots: int, args: argparse.Namespace) -> None:
+    manifest = {
+        "start_year": start_year,
+        "end_year": start_year + interval - 1,
+        "year_interval": interval,
+        "boots_trained": boots,
+        "vector_size": args.vector_size,
+        "window": args.window,
+        "min_count": args.min_count,
+        "iterations": args.iterations,
+        "workers": args.workers,
+        "sg": 0,
+        "model_prefix": build_model_prefix(args),
+    }
+    manifest_path.parent.mkdir(parents=True, exist_ok=True)
+    manifest_path.write_text(json.dumps(manifest, indent=2))
+
+
 def main():
     args = parse_arguments()
     paths = build_path_config(args)
+    model_prefix = build_model_prefix(args)
 
     if args.end_year is not None:
         # Batch mode: loop from start_year to end_year
@@ -115,10 +144,17 @@ def main():
                 if len(model1.wv) > 0:
                     print(f"[DEBUG] Top 10 words: {model1.wv.index_to_key[:10]}")
                 model1.train(corpus, total_examples=model1.corpus_count, epochs=args.iterations)
-                model_path = paths.bootstrap_model_path(current_start, boot, args.model_prefix, current_interval)
+                model_path = paths.bootstrap_model_path(current_start, boot, model_prefix, current_interval)
                 model_path.parent.mkdir(parents=True, exist_ok=True)
                 model1.save(str(model_path))
                 time.sleep(args.sleep)
+            write_manifest(
+                paths.bootstrap_model_path(current_start, 0, model_prefix, current_interval).parent / "training_manifest.json",
+                start_year=current_start,
+                interval=current_interval,
+                boots=args.boots,
+                args=args,
+            )
             current_start += args.year_interval
     else:
         # Single interval mode
@@ -151,10 +187,17 @@ def main():
             if len(model1.wv) > 0:
                 print(f"[DEBUG] Top 10 words: {model1.wv.index_to_key[:10]}")
             model1.train(corpus, total_examples=model1.corpus_count, epochs=args.iterations)
-            model_path = paths.bootstrap_model_path(args.start_year, boot, args.model_prefix, args.year_interval)
+            model_path = paths.bootstrap_model_path(args.start_year, boot, model_prefix, args.year_interval)
             model_path.parent.mkdir(parents=True, exist_ok=True)
             model1.save(str(model_path))
             time.sleep(args.sleep)
+        write_manifest(
+            paths.bootstrap_model_path(args.start_year, 0, model_prefix, args.year_interval).parent / "training_manifest.json",
+            start_year=args.start_year,
+            interval=args.year_interval,
+            boots=args.boots,
+            args=args,
+        )
 
 
 if __name__ == "__main__":

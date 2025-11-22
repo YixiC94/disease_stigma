@@ -17,7 +17,6 @@ from data_prep import build_lexicon_stigma
 from analysis import dimension_stigma
 
 YEARS = [1980, 1983, 1986, 1989, 1992, 1995, 1998, 2001, 2004, 2007, 2010, 2013, 2016]
-DEFAULT_MODEL_PREFIX = "CBOW_300d__win10_min50_iter3"
 DEFAULT_BOOT = 0
 
 
@@ -26,9 +25,14 @@ def parse_arguments() -> argparse.Namespace:
     add_path_arguments(parser)
     parser.add_argument(
         "--model-prefix",
-        default=DEFAULT_MODEL_PREFIX,
-        help="Model prefix used when loading bootstrapped Word2Vec models.",
+        required=False,
+        default=None,
+        help=(
+            "Model prefix used when loading bootstrapped Word2Vec models (e.g., CBOW_300d__win10_min50_iter3). "
+            "If omitted, will try reading training_manifest.json under each BootstrappedModels/<years>/ directory."
+        ),
     )
+    parser.add_argument("--year-interval", type=int, default=3, help="Number of years per window (default: 3).")
     parser.add_argument("--boot", type=int, default=DEFAULT_BOOT, help="Bootstrap number to evaluate (default: 0).")
     return parser.parse_args()
 
@@ -53,6 +57,25 @@ def load_lexicon_terms(paths) -> dict[str, list[str]]:
     }
 
 
+def resolve_model_prefix(paths, year: int, year_interval: int, provided_prefix: str | None) -> str:
+    if provided_prefix:
+        return provided_prefix
+    end_year = year + year_interval - 1
+    manifest_path = paths.modeling_dir_base / "BootstrappedModels" / f"{year}_{end_year}" / "training_manifest.json"
+    if manifest_path.exists():
+        import json
+
+        data = json.loads(manifest_path.read_text())
+        prefix = data.get("model_prefix")
+        if prefix:
+            print(f"[INFO] Using model_prefix from manifest: {prefix} (year {year}-{end_year})")
+            return prefix
+    raise ValueError(
+        f"model-prefix not provided and manifest not found/invalid at {manifest_path}. "
+        "Please pass --model-prefix explicitly."
+    )
+
+
 def fold_dimension_vectors(model: Word2Vec, terms: dict[str, list[str]]):
     dangerwords = build_lexicon_stigma.dimension_lexicon(model, terms["danger"], terms["safe"])
     disgustwords = build_lexicon_stigma.dimension_lexicon(model, terms["disgust"], terms["entice"])
@@ -71,6 +94,7 @@ def main() -> None:
     args = parse_arguments()
     paths = build_path_config(args)
     lexicon_terms = load_lexicon_terms(paths)
+    resolved_prefix_cache: dict[int, str] = {}
 
     train_accuracy_N_danger = []
     train_accuracy_percent_danger = []
@@ -109,7 +133,9 @@ def main() -> None:
     leastsim_disgust = []
 
     for yr1 in YEARS:
-        model_path = paths.bootstrap_model_path(yr1, args.boot, args.model_prefix)
+        if yr1 not in resolved_prefix_cache:
+            resolved_prefix_cache[yr1] = resolve_model_prefix(paths, yr1, args.year_interval, args.model_prefix)
+        model_path = paths.bootstrap_model_path(yr1, args.boot, resolved_prefix_cache[yr1], args.year_interval)
         print(f"PROCESSING MODEL FOR YEAR: {yr1} ({model_path})")
         currentmodel = Word2Vec.load(str(model_path))
 
