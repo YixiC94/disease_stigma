@@ -16,13 +16,19 @@ from config.path_config import add_path_arguments, build_path_config
 def load_articles(paths, start_year: int, year_interval: int = 3):
     sampled_articles_for_bigrammer = []
     for year in range(start_year, start_year + year_interval):
+        tfile_split = None
         try:
             with open(paths.raw_article_path(year), "rb") as file:
                 tfile_split = pickle.load(file)
         except FileNotFoundError:
-            with open(paths.contemp_article_path(year), "rb") as file:
-                tfile_split = pickle.load(file)
-
+            try:
+                with open(paths.contemp_article_path(year), "rb") as file:
+                    tfile_split = pickle.load(file)
+            except FileNotFoundError:
+                print(f"[SKIP] No data for year {year}: both NData and ContempData missing")
+                continue
+        if not tfile_split:
+            continue
         samp_n = round(0.75 * len(tfile_split))
         tfile_split = sample(tfile_split, samp_n)
         tfile_split = [article.split(" SENTENCEBOUNDARYHERE ") for article in tfile_split]
@@ -58,7 +64,12 @@ def main():
         while current_start <= args.end_year:
             current_interval = min(args.year_interval, args.end_year - current_start + 1)
             print(f"Training bigrammer for {current_start}-{current_start + current_interval - 1}")
-            sampled_articles_for_bigrammer = load_articles(paths, current_start, current_interval)
+            try:
+                sampled_articles_for_bigrammer = load_articles(paths, current_start, current_interval)
+            except FileNotFoundError as e:
+                print(f"[SKIP] No data for year {current_start}: {e}")
+                current_start += args.year_interval
+                continue
             train_bigrammer(sampled_articles_for_bigrammer, paths.bigram_path(current_start, current_interval))
             current_start += args.year_interval
     else:
