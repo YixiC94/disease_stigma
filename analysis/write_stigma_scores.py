@@ -163,9 +163,13 @@ def compute_dimension_scores(
     missing_models = 0
     no_lexicon = 0
     for yr1 in years:
-        diseases = load_diseases(paths)
-        score_columns = []
-        resolved_prefix = resolve_model_prefix(paths, yr1, year_interval, model_prefix)
+        try:
+            diseases = load_diseases(paths)
+            score_columns = []
+            resolved_prefix = resolve_model_prefix(paths, yr1, year_interval, model_prefix)
+        except ValueError as e:
+            print(f"[WARN] Skipping year {yr1} for dimension '{dimension_name}': {e}")
+            continue
         for bootnum in boot_range:
             model_path = paths.bootstrap_model_path(yr1, bootnum, resolved_prefix)
             if not model_path.exists():

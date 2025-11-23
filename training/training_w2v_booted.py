@@ -19,12 +19,19 @@ from config.path_config import add_path_arguments, build_path_config
 def write_booted_txt(paths, cyear: int, seed_no: int, output_path: Path, year_interval: int):
     all_articles = []
     for year in range(cyear, cyear + year_interval):
+        tfile_split = None
         try:
             with open(paths.raw_article_path(year), "rb") as file:
                 tfile_split = pickle.load(file)
         except FileNotFoundError:
-            with open(paths.contemp_article_path(year), "rb") as file:
-                tfile_split = pickle.load(file)
+            try:
+                with open(paths.contemp_article_path(year), "rb") as file:
+                    tfile_split = pickle.load(file)
+            except FileNotFoundError:
+                print(f"[SKIP] No data for year {year}: both NData and ContempData missing")
+                continue
+        if not tfile_split:
+            continue
         all_articles.extend(tfile_split)
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
