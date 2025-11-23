@@ -1,0 +1,191 @@
+# -*- coding: utf-8 -*-
+"""
+Train bootstrapped Word2Vec models for a configurable year window (default 3 years).
+"""
+
+import argparse
+import json
+import time
+import pickle
+from random import seed, choices
+from pathlib import Path
+from gensim.models import Word2Vec
+from gensim.models.phrases import Phraser
+from nltk.tokenize import word_tokenize
+
+from config.path_config import add_path_arguments, build_path_config
+
+
+def write_booted_txt(paths, cyear: int, seed_no: int, output_path: Path, year_interval: int):
+    all_articles = []
+    for year in range(cyear, cyear + year_interval):
+        try:
+            with open(paths.raw_article_path(year), "rb") as file:
+                tfile_split = pickle.load(file)
+        except FileNotFoundError:
+            with open(paths.contemp_article_path(year), "rb") as file:
+                tfile_split = pickle.load(file)
+        all_articles.extend(tfile_split)
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(output_path, "w", encoding="utf-8") as f:
+        seed(seed_no)
+        all_articles = choices(all_articles, k=len(all_articles))
+        for article in all_articles:
+            sentences_list = article.split(" SENTENCEBOUNDARYHERE ")
+            for sent in sentences_list:
+                f.write(sent)
+                f.write("\n")
+
+
+class SentenceIterator:
+    def __init__(self, filepath: Path):
+        self.filepath = filepath
+
+    def __iter__(self):
+        for line in open(self.filepath, "r", encoding="utf-8"):
+            yield word_tokenize(line.rstrip("\n"))
+
+
+class PhrasingIterable(object):
+    def __init__(self, phrasifier, texts):
+        self.phrasifier, self.texts = phrasifier, texts
+
+    def __iter__(self):
+        return iter(self.phrasifier[self.texts])
+
+
+def parse_arguments():
+    parser = argparse.ArgumentParser(description="Train bootstrapped Word2Vec models.")
+    add_path_arguments(parser)
+    parser.add_argument("--start-year", type=int, default=1992, help="Start year of the window (e.g., 1992).")
+    parser.add_argument("--end-year", type=int, default=None, help="End year for batch training (optional)")
+    parser.add_argument("--year-interval", type=int, default=3, help="Number of years to include in the window.")
+    parser.add_argument("--boots", type=int, default=25, help="Number of bootstrap models to train.")
+    parser.add_argument(
+        "--model-prefix",
+        type=str,
+        default=None,
+        help=(
+            "Prefix used when saving bootstrapped Word2Vec models. "
+            "If omitted, a prefix will be auto-generated from vector_size/window/min_count/iterations."
+        ),
+    )
+    parser.add_argument("--window", type=int, default=10)
+    parser.add_argument("--min-count", type=int, default=50)
+    parser.add_argument("--vector-size", type=int, default=300)
+    parser.add_argument("--workers", type=int, default=5)
+    parser.add_argument("--iterations", type=int, default=3)
+    parser.add_argument("--sleep", type=int, default=120, help="Seconds to pause between model training steps.")
+    return parser.parse_args()
+
+
+def build_model_prefix(args: argparse.Namespace) -> str:
+    if args.model_prefix:
+        return args.model_prefix
+    return f"CBOW_{args.vector_size}d__win{args.window}_min{args.min_count}_iter{args.iterations}"
+
+
+def write_manifest(manifest_path: Path, *, start_year: int, interval: int, boots: int, args: argparse.Namespace) -> None:
+    manifest = {
+        "start_year": start_year,
+        "end_year": start_year + interval - 1,
+        "year_interval": interval,
+        "boots_trained": boots,
+        "vector_size": args.vector_size,
+        "window": args.window,
+        "min_count": args.min_count,
+        "iterations": args.iterations,
+        "workers": args.workers,
+        "sg": 0,
+        "model_prefix": build_model_prefix(args),
+    }
+    manifest_path.parent.mkdir(parents=True, exist_ok=True)
+    manifest_path.write_text(json.dumps(manifest, indent=2))
+
+
+def main():
+    args = parse_arguments()
+    paths = build_path_config(args)
+    model_prefix = build_model_prefix(args)
+
+    if args.end_year is not None:
+        # Batch mode: loop from start_year to end_year
+        current_start = args.start_year
+        total_windows = ((args.end_year - args.start_year) // args.year_interval) + 1
+        window_idx = 1
+        while current_start <= args.end_year:
+            current_interval = min(args.year_interval, args.end_year - current_start + 1)
+            print(f"[{window_idx}/{total_windows}] Training W2V for {current_start}-{current_start + current_interval - 1}")
+            bigram_transformer = Phraser.load(str(paths.bigram_path(current_start, current_interval)))
+            for boot in range(args.boots):
+                write_booted_txt(paths, current_start, boot, paths.bootstrap_corpus_path(current_start, current_interval), current_interval)
+                sentences = SentenceIterator(paths.bootstrap_corpus_path(current_start, current_interval))
+                corpus = list(PhrasingIterable(bigram_transformer, sentences))
+                time.sleep(args.sleep)
+                if not corpus:
+                    print(f"Warning: Empty corpus for years {current_start}-{current_start + current_interval - 1}, boot {boot}. Skipping.")
+                    continue
+                model1 = Word2Vec(
+                    workers=args.workers,
+                    window=args.window,
+                    sg=0,
+                    vector_size=args.vector_size,
+                    min_count=args.min_count,
+                )
+                model1.build_vocab(corpus)
+                if model1.corpus_count == 0 or len(model1.wv) == 0:
+                    print(f"Warning: No vocabulary built for years {current_start}-{current_start + current_interval - 1}, boot {boot}. Skipping.")
+                    continue
+                model1.train(corpus, total_examples=model1.corpus_count, epochs=args.iterations)
+                model_path = paths.bootstrap_model_path(current_start, boot, model_prefix, current_interval)
+                model_path.parent.mkdir(parents=True, exist_ok=True)
+                model1.save(str(model_path))
+                time.sleep(args.sleep)
+            write_manifest(
+                paths.bootstrap_model_path(current_start, 0, model_prefix, current_interval).parent / "training_manifest.json",
+                start_year=current_start,
+                interval=current_interval,
+                boots=args.boots,
+                args=args,
+            )
+            current_start += args.year_interval
+            window_idx += 1
+    else:
+        # Single interval mode
+        bigram_transformer = Phraser.load(str(paths.bigram_path(args.start_year, args.year_interval)))
+        for boot in range(args.boots):
+            write_booted_txt(paths, args.start_year, boot, paths.bootstrap_corpus_path(args.start_year, args.year_interval), args.year_interval)
+            sentences = SentenceIterator(paths.bootstrap_corpus_path(args.start_year, args.year_interval))
+            corpus = list(PhrasingIterable(bigram_transformer, sentences))
+            time.sleep(args.sleep)
+            if not corpus:
+                print(f"Warning: Empty corpus for years {args.start_year}-{args.start_year + args.year_interval - 1}, boot {boot}. Skipping.")
+                continue
+            model1 = Word2Vec(
+                workers=args.workers,
+                window=args.window,
+                sg=0,
+                vector_size=args.vector_size,
+                min_count=args.min_count,
+            )
+            model1.build_vocab(corpus)
+            if model1.corpus_count == 0 or len(model1.wv) == 0:
+                print(f"Warning: No vocabulary built for years {args.start_year}-{args.start_year + args.year_interval - 1}, boot {boot}. Skipping.")
+                continue
+            model1.train(corpus, total_examples=model1.corpus_count, epochs=args.iterations)
+            model_path = paths.bootstrap_model_path(args.start_year, boot, model_prefix, args.year_interval)
+            model_path.parent.mkdir(parents=True, exist_ok=True)
+            model1.save(str(model_path))
+            time.sleep(args.sleep)
+        write_manifest(
+            paths.bootstrap_model_path(args.start_year, 0, model_prefix, args.year_interval).parent / "training_manifest.json",
+            start_year=args.start_year,
+            interval=args.year_interval,
+            boots=args.boots,
+            args=args,
+        )
+
+
+if __name__ == "__main__":
+    main()

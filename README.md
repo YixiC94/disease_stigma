@@ -1,48 +1,162 @@
-# disease_stigma
+# Disease Stigma Pipeline
 
-**This code repository accompanies the paper "[The Stigma of Diseases: Unequal Burden, Uneven Decline](https://osf.io/preprints/socarxiv/7nm9x/)" by Rachel Kahn Best and Alina Arseniev-Koehler, forthcoming in _American Sociological Review_.** 
+This repository accompanies the paper ["The Stigma of Diseases: Unequal Burden, Uneven Decline"](https://osf.io/preprints/socarxiv/7nm9x/) by Rachel Kahn Best and Alina Arseniev-Koehler (forthcoming in *American Sociological Review*).
 
-Preprint of paper is available here: https://osf.io/preprints/socarxiv/7nm9x/. Details and context for this code are described in the paper and appendices. 
+Using word-embedding methods, the project measures stigma for 106 health conditions across 4.7 million news articles from 1980–2018. Code in this repository prepares corpora, trains models, validates embeddings, and aggregates stigma indices. The codebase has been reorganized into functional directories (data preparation, training, validation, analysis) with shared paths centralized in `config/`.
 
-**Paper abstract:** Why are some diseases more stigmatized than others? And, has disease stigma declined over time? Answers to these questions have been hampered by a lack of comparable data. Using word embedding methods, we analyze 4.7 million news articles to create new measures of stigma for 106 health conditions from 1980-2018. Using mixed effects regressions, we find that behavioral health conditions and preventable diseases attract the strongest connotations of immorality and negative personality traits. Meanwhile, infectious diseases are marked by disgust. These results lend new empirical support to theories that norm enforcement and contagion avoidance drive disease stigma. Challenging existing theories, we find no evidence for a link between medicalization and stigma, and inconclusive evidence on the relationship between advocacy and stigma. Finally, we find that stigma has declined dramatically over time, but only for chronic physical illnesses. In the past four decades, stigma has transformed from a sea of negative connotations surrounding most diseases to two primary conduits of meaning: infectious diseases spark disgust, and behavioral health conditions cue negative stereotypes. These results show that cultural meanings are especially durable when they are anchored by interests, and that cultural changes intertwine in ways that only become visible through large-scale research.
+## Directory structure
 
+```
+config/                      # Shared configuration (path helpers)
+data_prep/                   # Corpus preparation and lexicon utilities
+training/                    # Training scripts for phrasers and Word2Vec models
+validation/                  # Model and dimension validation utilities
+analysis/                    # Aggregation, plotting, and scoring scripts
 
+data/                        # User-provided corpora and prepared pickles (not tracked)
+reference_data/              # Reference CSV/text inputs (lexicons, traits, questions)
+outputs/
+  models/                    # Default location for trained models and intermediates
+  results/                   # Default location for aggregated CSVs and plots
+notebooks/                   # Reserved for exploratory notebooks
+```
 
-**Final_Search_SymptomsDiseasesList.txt**
-* List of search terms used for symptoms and diseases, we used this search term list to collect news articles via the Lexis Nexis API. 
-* Note: We do not include code to collect raw news data using the Lexis Nexis API. Our code for this is lightly adapted from code provided to us by the University of Michigan to use the LexisNexis API and uses private API keys. We cannot redstribute the raw data collected from Lexis Nexis API.
+Key reference files live in `reference_data/`:
 
-**TrainingPhraser_CleanedUp.py**
-* Train a phraser on text data from a given time window. One phraser trained per time window. 
+* `Stigma_WordLists.csv`
+* `Disease_list_5.12.20_uncorrupted.csv`
+* `updated_personality_trait_list.csv`
+* `questions_words_pasted.txt`
+* `Final_Search_SymptomsDiseasesList.txt`
 
-**TrainingW2V_Booted_CleanedUp.py**
-* Train word2vec models on bootstrapped text data. Use phrasers for each time window trained with the code "TrainingPhraser_CleanedUp.py"
+An example aggregated output is provided at `outputs/results/stigmaindex_aggregated_temp_92CI.csv`.
 
-**Validating_OverallW2VModels_CleanedUp.py**
-* Validate an overall word2vec model on the WordSim-353 Test
-* Validate an overall word2vec model on the Google Analogy Test
-* Requires: questions_words_pasted.txt
+## Script overview
 
-**Validating_Dimensions in Bootstraps_CleanedUp.py**
-* Cross-validation for each of 4 dimensions
-* Cosine similarities between all the 4 dimensions
-* Most and least similar words to each of 4 dimensions
-* Requires: build_lexicon_stigma.py and dimension_stigma.py
-* Note: We do not include code or data for comparing our dimensions to human-rated data collected by Pachankis et. al; we cannot distribute data from Pachankis et al.  
+### Data preparation
+* `data_prep/prepare_corpus.py`: Convert news article CSV/Parquet into yearly pickle files (`NData_<year>/all<year>bodytexts_regexeddisamb_listofarticles`) expected by the training scripts.
+* `data_prep/build_lexicon_stigma.py`: Build stigma-related lexicons used across training, validation, and analysis steps.
 
-**WriteStigmaScores_CleanedUp.py**
-* Compute each of 4 stigma scores and medicalization score for each disease, in each model, in each time period. Write results to CSVs (one CSV per dimension, per time window).
-* Requires: build_lexicon_stigma.py and dimension_stigma.py, updated_personality_trait_list.csv, Stigma_WordLists.csv, and Disease_list_5.12.20_uncorrupted.csv.
+### Training
+* `training/training_phraser.py`: Train phrasers on text data for configurable time windows. Supports two modes:
+  - Single window: Specify `--start-year` and `--year-interval` to train one phraser for that interval.
+  - Batch mode: Add `--end-year` to automatically train phrasers for all intervals from `start-year` to `end-year` (inclusive), each of length `year-interval`.
+* `training/training_w2v_booted.py`: Train bootstrapped Word2Vec models for configurable time windows. Supports two modes:
+  - Single window: Specify `--start-year` and `--year-interval` to train models for one interval.
+  - Batch mode: Add `--end-year` to automatically train models for all intervals from `start-year` to `end-year` (inclusive), each of length `year-interval`. Each interval will use its corresponding phraser model.
 
-**AggregatingStigmaScores_StigmaIndex_CleanedUp.py**
-* Aggregate bootstrapped scores for the time windows and 4 dimensions to get a mean and 92% confidence interval for each disease's mean loading across the 4 dimensions (i.e., stigma score) in each time window. Write results to a single CSV (this CSV is also included in this repository: stigmaindex_aggregated_temp_92CI.csv). 
+### Validation
+* `validation/validating_overall_w2v_models.py`: Validate an overall Word2Vec model on the WordSim-353 test set and the Google analogy test (`reference_data/questions_words_pasted.txt`).
+* `validation/validating_dimensions_in_bootstraps.py`: Perform cross-validation for each of the four stigma dimensions, compute cosine similarities, and list the most/least similar words. Requires `data_prep/build_lexicon_stigma.py` and `analysis/dimension_stigma.py`.
 
-**AggregatingBootstraps_CleanedUp.py**
-* Aggregate bootstrapped scores for time windows to get a mean and 92% confidence interval for each disease's loading on a dimension in a given time window. Write results to a CSV (one CSV per dimension). 
+### Analysis and aggregation
+* `analysis/write_stigma_scores.py`: Compute four stigma scores plus a medicalization score for each disease across models/time windows and write CSVs. Depends on `data_prep/build_lexicon_stigma.py`, `analysis/dimension_stigma.py`, and inputs such as `reference_data/updated_personality_trait_list.csv`, `reference_data/Stigma_WordLists.csv`, and `reference_data/Disease_list_5.12.20_uncorrupted.csv`.
+* `analysis/aggregating_stigma_index.py`: Aggregate bootstrapped scores across time windows to produce mean and 92% confidence intervals for each disease’s stigma index (writes a consolidated CSV, e.g., `stigmaindex_aggregated_temp_92CI.csv`).
+* `analysis/aggregating_bootstraps.py`: Aggregate bootstrapped scores per dimension and time window, emitting one CSV per dimension.
+* `analysis/word_counts.py`: Compute per-disease mention counts with confidence intervals. Requires `reference_data/Disease_list_5.12.20_uncorrupted.csv` and currently contains legacy hard-coded paths.
+* `analysis/plotting_bootstrapped.py`: Visualize stigma scores of diseases by group and time (expects an aggregated CSV such as `stigmaindex_aggregated_temp_92CI.csv`).
 
-**WordCounts.py**
-* Compute the number of mentions for each disease, in each model, in each time period.  Get a mean and 92% confidence interval for each disease's number of mentions in a given time window. Write results to a CSV. 
-* Requires: Disease_list_5.12.20_uncorrupted.csv
+## Dependencies
 
-**PlottingBootstrapped_CleanedUp.py**
-* Visualize stigma scores of diseases, by disease group, across time. (Requires stigmaindex_aggregated_temp_92CI.csv).
+The pipeline relies on the following Python packages:
+
+* `gensim`
+* `pandas`
+* `numpy`
+* `matplotlib`
+* `nltk`
+* `scikit-learn`
+
+Install them with `pip install -r requirements.txt` (if available) or `pip install gensim pandas numpy matplotlib nltk scikit-learn`.
+
+## Shared path configuration
+
+`config/path_config.py` centralizes path handling. Scripts import it via `from config.path_config import add_path_arguments, build_path_config` and accept consistent CLI flags:
+
+* `--raw-data-root`: Base directory containing `NData_<year>` folders with article pickles (default: `data/preprocessed`).
+* `--contemp-data-root`: Optional override for `ContempData_<year>` folders (falls back to `--raw-data-root`).
+* `--modeling-dir-base`: Base directory for modeling outputs (default: `outputs/models`). Phraser models will be saved in `<base>/phrasers`, W2V models in `<base>/BootstrappedModels`.
+* `--results-dir`: Where result CSVs and plots are written (default: `outputs/results`).
+* `--analyses-dir`: Base directory for ancillary files (default: `analysis`).
+* `--lexicon-path`, `--disease-list-path`, `--personality-traits-path`: Paths to the bundled CSV inputs in `reference_data/`.
+
+## Typical workflow
+
+1. **Prepare corpus pickles** (from CSV or Parquet input):
+   ```bash
+   python data_prep/prepare_corpus.py \
+     --input-path /path/to/articles.csv \  # or .parquet
+     --text-column Text --title-column title --date-column Date \
+     --default-year 2010 --output-root data/preprocessed --write-manifest
+   ```
+   - The script auto-detects format by extension; override with `--input-format csv|parquet` if needed.
+
+2. **Train phrase model(s) for time windows**:
+   - Single window:
+     ```bash
+     python training/training_phraser.py \
+       --start-year 1992 --year-interval 3 --raw-data-root data/preprocessed --modeling-dir-base outputs/models
+     ```
+   - Batch mode (multiple windows):
+     ```bash
+     python training/training_phraser.py \
+       --start-year 1980 --year-interval 3 --end-year 1991 --raw-data-root data/preprocessed --modeling-dir-base outputs/models
+     ```
+   This will train all intervals from 1980–1982, 1983–1985, … up to 1991.
+
+3. **Train bootstrapped Word2Vec models**:
+   - Single window:
+     ```bash
+     python training/training_w2v_booted.py \
+       --start-year 1992 --year-interval 3 --boots 25 \
+       --min-count 50 --window 10 --vector-size 300 \
+       --raw-data-root data/preprocessed --modeling-dir-base outputs/models
+     ```
+   - Batch mode (multiple windows):
+     ```bash
+     python training/training_w2v_booted.py \
+       --start-year 1980 --year-interval 3 --end-year 1991 --boots 25 \
+       --min-count 50 --window 10 --vector-size 300 \
+       --raw-data-root data/preprocessed --modeling-dir-base outputs/models
+     ```
+   This will train all intervals from 1980–1982, 1983–1985, … up to 1991.
+   - `--model-prefix` is optional; when omitted, a name is auto-generated (e.g., `CBOW_300d__win10_min50_iter3`) and stored in `BootstrappedModels/<years>/training_manifest.json` along with training parameters.
+   - For mock/testing runs you can lower `--min-count` (e.g., 1) and/or supply a different prefix to keep outputs distinct from official runs.
+
+4. **Validate models** (run after training to catch issues early):
+  * Overall analogies: `python validation/validating_overall_w2v_models.py --model-path outputs/models/<model>`
+  * Dimension quality: `python validation/validating_dimensions_in_bootstraps.py --modeling-dir-base outputs/models --year-interval 3 --model-prefix <prefix>`
+    - You may omit `--model-prefix`; the script will read `training_manifest.json` to discover it.
+
+5. **Compute stigma scores per dimension**:
+   ```bash
+   python analysis/write_stigma_scores.py \
+     --modeling-dir-base outputs/models --results-dir outputs/results \
+     --start-year 1980 --year-interval 3 --end-year 2016 --boots 25 \
+     --plotting-groups neurodevelopmental
+   ```
+   - You may omit `--model-prefix`; the script will read `training_manifest.json` for each interval.
+   - For mock data you can use fewer `--boots` and a lower `--lexicon-min-count`.
+
+6. **Aggregate and plot**:
+   ```bash
+   python analysis/aggregating_stigma_index.py \
+     --results-dir outputs/results \
+     --start-year 1980 --end-year 2016 --year-interval 3 \
+     --dimensions negpostraits disgust danger impurity
+
+   python analysis/plotting_bootstrapped.py \
+     --dimension stigmaindex --results-dir outputs/results
+   ```
+   - Aggregation now accepts `--start-year/--end-year/--year-interval` to match what you trained, and skips missing temp files with a warning.
+   - For mock runs, limit the years and boots you actually produced (e.g., `--start-year 1980 --end-year 1980 --boots 1`) to avoid missing-file noise.
+
+## Notes and outstanding manual adjustments
+
+* `analysis/word_counts.py` still contains legacy, hard-coded paths and should be updated before use.
+* Validation and analysis scripts assume trained models and bootstrapped artifacts exist in `outputs/models`.
+* Raw LexisNexis corpora are not distributed; use your own data with the provided preprocessing script.
+
+## Historical context
+
+Full methodological details and empirical findings are described in the linked preprint and its appendices.
