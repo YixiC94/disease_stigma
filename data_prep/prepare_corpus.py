@@ -22,6 +22,56 @@ import pandas as pd
 SENT_BOUNDARY = " SENTENCEBOUNDARYHERE "
 
 
+def load_disease_mapping(disease_list_path: Path) -> dict[str, str]:
+    """Load disease name variations mapping from the disease list CSV."""
+    if not disease_list_path or not disease_list_path.exists():
+        return {}
+    
+    disease_df = pd.read_csv(disease_list_path)
+    disease_mapping = {}
+    
+    for _, row in disease_df.iterrows():
+        variation = str(row['Name2']).strip().lower()
+        reconciled = str(row['Reconciled_Name']).strip().lower()
+        
+        # Skip if either is NaN or empty
+        if variation and variation != 'nan' and reconciled and reconciled != 'nan':
+            disease_mapping[variation] = reconciled
+    
+    return disease_mapping
+
+
+def consolidate_disease_names(text: str, disease_mapping: dict[str, str]) -> str:
+    """Replace disease name variations with their reconciled standard names."""
+    if not text or not disease_mapping:
+        return text
+    
+    text_lower = text.lower()
+    replacements = []
+    
+    # Sort by length (longest first) to handle overlapping patterns
+    sorted_variations = sorted(disease_mapping.keys(), key=len, reverse=True)
+    
+    for variation in sorted_variations:
+        # Use word boundaries to match whole phrases
+        pattern = r'\b' + re.escape(variation) + r'\b'
+        
+        # Find all matches
+        for match in re.finditer(pattern, text_lower):
+            start, end = match.span()
+            replacements.append((start, end, disease_mapping[variation]))
+    
+    # Sort by position (reverse) to replace from end to start (avoids index shifting)
+    replacements.sort(reverse=True)
+    
+    # Apply replacements
+    text_updated = text
+    for start, end, replacement in replacements:
+        text_updated = text_updated[:start] + replacement + text_updated[end:]
+    
+    return text_updated
+
+
 def clean_text(value: Any) -> str:
     if value is None:
         return ""
@@ -152,6 +202,12 @@ def parse_args() -> argparse.Namespace:
         help="Column containing a date or year; used to route articles to the correct NData_<year> folder.",
     )
     parser.add_argument(
+        "--disease-list-path",
+        type=Path,
+        default=None,
+        help="Optional path to disease list CSV for consolidating disease name variations (e.g., reference_data/Disease_list_5.12.20_uncorrupted.csv).",
+    )
+    parser.add_argument(
         "--default-year",
         type=int,
         default=None,
@@ -198,6 +254,12 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
 
+    # Load disease mapping if provided
+    disease_mapping = {}
+    if args.disease_list_path:
+        disease_mapping = load_disease_mapping(args.disease_list_path)
+        print(f"Loaded {len(disease_mapping)} disease name mappings from {args.disease_list_path}")
+
     grouped_articles: dict[int, list[str]] = defaultdict(list)
     seen_ids: set[str] = set()
     skipped_empty = 0
@@ -212,6 +274,12 @@ def main() -> None:
 
         title = clean_text(row.get(args.title_column))
         body = clean_text(row.get(args.text_column))
+        
+        # Consolidate disease names if mapping is provided
+        if disease_mapping:
+            title = consolidate_disease_names(title, disease_mapping)
+            body = consolidate_disease_names(body, disease_mapping)
+        
         if not body and not title:
             skipped_empty += 1
             continue
