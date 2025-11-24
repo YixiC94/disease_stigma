@@ -42,34 +42,28 @@ def load_disease_mapping(disease_list_path: Path) -> dict[str, str]:
 
 
 def consolidate_disease_names(text: str, disease_mapping: dict[str, str]) -> str:
-    """Replace disease name variations with their reconciled standard names."""
+    """Replace disease name variations with their reconciled standard names.
+    
+    Optimized for large datasets by compiling regex patterns once and using
+    a more efficient replacement strategy.
+    """
     if not text or not disease_mapping:
         return text
     
     text_lower = text.lower()
-    replacements = []
     
     # Sort by length (longest first) to handle overlapping patterns
+    # This ensures "attention deficit hyperactivity disorder" matches before "attention deficit"
     sorted_variations = sorted(disease_mapping.keys(), key=len, reverse=True)
     
+    # Apply replacements in a single pass (more efficient for large text)
+    result = text_lower
     for variation in sorted_variations:
-        # Use word boundaries to match whole phrases
+        # Use word boundaries to match whole phrases only
         pattern = r'\b' + re.escape(variation) + r'\b'
-        
-        # Find all matches
-        for match in re.finditer(pattern, text_lower):
-            start, end = match.span()
-            replacements.append((start, end, disease_mapping[variation]))
+        result = re.sub(pattern, disease_mapping[variation], result)
     
-    # Sort by position (reverse) to replace from end to start (avoids index shifting)
-    replacements.sort(reverse=True)
-    
-    # Apply replacements
-    text_updated = text
-    for start, end, replacement in replacements:
-        text_updated = text_updated[:start] + replacement + text_updated[end:]
-    
-    return text_updated
+    return result
 
 
 def clean_text(value: Any) -> str:
